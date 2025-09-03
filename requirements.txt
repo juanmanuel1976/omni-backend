@@ -1,5 +1,6 @@
 flask[async]
-flask-cors
+gunicorn
 httpx
 anthropic
-gunicorn
+flask-cors
+uvicorn
