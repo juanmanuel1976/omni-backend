@@ -32,6 +32,9 @@ def get_initial_prompt(user_prompt):
 
 # --- NUEVAS FUNCIONES DE STREAMING PARA CADA IA ---
 async def stream_gemini(prompt):
+    if not GOOGLE_API_KEY:
+        yield {"model": "gemini", "chunk": "Error: GOOGLE_API_KEY no está configurada."}
+        return
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key={GOOGLE_API_KEY}"
@@ -45,17 +48,18 @@ async def stream_gemini(prompt):
                 async for line in response.aiter_lines():
                     if '"text": "' in line:
                         try:
-                            # Extrae el contenido de la clave "text"
                             text_content = line.split('"text": "')[1].rsplit('"', 1)[0]
-                            # Reemplaza las secuencias de escape más comunes de forma segura
                             clean_text = text_content.replace('\\n', '\n').replace('\\"', '"')
                             yield {"model": "gemini", "chunk": clean_text}
                         except IndexError:
-                            continue # Línea mal formada, la ignoramos
+                            continue
     except Exception as e:
         yield {"model": "gemini", "chunk": f" Error en stream Gemini: {e}"}
 
 async def stream_deepseek(prompt):
+    if not DEEPSEEK_API_KEY:
+        yield {"model": "deepseek", "chunk": "Error: DEEPSEEK_API_KEY no está configurada."}
+        return
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
             headers = {"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"}
@@ -80,6 +84,9 @@ async def stream_deepseek(prompt):
         yield {"model": "deepseek", "chunk": f" Error en stream DeepSeek: {e}"}
 
 async def stream_claude(prompt):
+    if not ANTHROPIC_API_KEY:
+        yield {"model": "claude", "chunk": "Error: ANTHROPIC_API_KEY no está configurada."}
+        return
     try:
         client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY, timeout=120.0)
         async with client.messages.stream(model="claude-3-haiku-20240307", max_tokens=4096, messages=[{"role": "user", "content": prompt}]) as stream:
@@ -99,13 +106,11 @@ async def generate_initial_stream():
     initial_prompt = get_initial_prompt(prompt)
 
     async def event_stream():
-        # Diccionario para mantener las tareas activas
         tasks = {
             "gemini": stream_gemini(initial_prompt),
             "deepseek": stream_deepseek(initial_prompt),
             "claude": stream_claude(initial_prompt)
         }
-        # Creamos tareas para obtener el primer resultado de cada stream
         pending_tasks = [asyncio.create_task(tasks[name].__anext__(), name=name) for name in tasks]
 
         while pending_tasks:
@@ -115,11 +120,9 @@ async def generate_initial_stream():
                 try:
                     result = task.result()
                     yield f"data: {json.dumps(result)}\n\n"
-                    # Si el stream no ha terminado, creamos una nueva tarea para obtener el siguiente elemento
                     new_task = asyncio.create_task(tasks[model_name].__anext__(), name=model_name)
                     pending_tasks.add(new_task)
                 except StopAsyncIteration:
-                    # Este stream ha terminado
                     continue
         
         yield f"data: {json.dumps({'model': 'system', 'chunk': 'DONE'})}\n\n"
