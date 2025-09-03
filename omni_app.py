@@ -1,16 +1,15 @@
 # ==============================================================================
-# OMNIQUERY - SERVIDOR DE PROTOTIPO FUNCIONAL v2.0
-# Versión optimizada para despliegue en Render.
+# OMNIQUERY - SERVIDOR DE PROTOTIPO FUNCIONAL v2.1
+# Versión con Prompt Engineering para respuestas iniciales concisas y en español.
 # ==============================================================================
 import asyncio
 import httpx
-import os # Para leer las claves de API de forma segura
-from flask import Flask, request, jsonify, send_from_directory
+import os
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from anthropic import AsyncAnthropic
 
 # --- CONFIGURACIÓN DE CLAVES DE API (DESDE EL ENTORNO) ---
-# Render inyectará estas claves de forma segura.
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
@@ -20,6 +19,7 @@ app = Flask(__name__)
 CORS(app)
 
 # --- FUNCIONES ASÍCRONAS PARA LLAMAR A LAS IAS ---
+# (No se necesitan cambios en estas funciones)
 async def call_gemini(prompt):
     try:
         async with httpx.AsyncClient(timeout=90.0) as client:
@@ -55,7 +55,21 @@ async def generate_initial():
     data = request.json
     prompt = data.get('prompt')
     if not prompt: return jsonify({"error": "No se proporcionó un prompt"}), 400
-    tasks = [call_gemini(prompt), call_deepseek(prompt), call_claude(prompt)]
+
+    # ==========================================================================
+    # PASO 2: PROMPT MEJORADO PARA RESPUESTAS INICIALES
+    # Aquí इes donde इenvolvemos" el prompt del usuario con nuestras instrucciones.
+    # ==========================================================================
+    initial_prompt = f"""
+**Instrucciones Clave:**
+1.  **Idioma Obligatorio:** Responde siempre y únicamente en español.
+2.  **Estilo Conciso:** Para esta primera respuesta, sé muy breve y directo. Ofrece un resumen ejecutivo, los puntos clave o una respuesta inicial clara. Evita introducciones largas, formalidades innecesarias y explayarte en detalles. El objetivo es dar una primera impresión rápida y útil para que el usuario pueda comparar.
+
+**Consulta del Usuario:**
+"{prompt}"
+"""
+
+    tasks = [call_gemini(initial_prompt), call_deepseek(initial_prompt), call_claude(initial_prompt)]
     results_list = await asyncio.gather(*tasks)
     responses = {model.lower(): {"content": text, "model": model} for model, text in results_list}
     return jsonify(responses)
@@ -64,8 +78,13 @@ async def generate_initial():
 async def refine_and_synthesize():
     data = request.json
     prompt, decisions, initial_responses = data.get('prompt'), data.get('decisions'), data.get('initial_responses')
+    
+    # Aseguramos que las respuestas de refinamiento y síntesis también sean en español
+    spanish_instruction = "Asegúrate de que tu respuesta esté en español.\n\n"
+
     active_models = {k: v for k, v in decisions.items() if v != 'discard'}
     highlighted_model = next((k for k, v in decisions.items() if v == 'highlight'), None)
+    
     tasks_r2 = []
     if highlighted_model:
         context = f"Respuesta destacada como modelo a seguir:\n{initial_responses[highlighted_model]['content']}"
@@ -73,22 +92,24 @@ async def refine_and_synthesize():
             if model_name == highlighted_model:
                 tasks_r2.append(asyncio.sleep(0, result=(model_name.capitalize(), initial_responses[model_name]['content'])))
             else:
-                new_prompt = f"Pregunta Original: '{prompt}'.\nEnfoque preferido por el usuario:\n{context}\n\nAdapta tu respuesta a este enfoque."
+                new_prompt = f"{spanish_instruction}Pregunta Original: '{prompt}'.\nEnfoque preferido por el usuario:\n{context}\n\nAdapta tu respuesta a este enfoque, manteniendo el idioma español."
                 tasks_r2.append(globals()[f'call_{model_name}'](new_prompt))
     else:
         for model_to_run in active_models:
             context_prompts = [f"Contexto de {name.capitalize()}:\n{resp['content']}" for name, resp in initial_responses.items() if name in active_models and name != model_to_run]
             context = "\n\n".join(context_prompts)
-            new_prompt = f"Pregunta Original: '{prompt}'.\n\nContexto de otras IAs:\n{context}\n\nRefina tu respuesta con esta información."
+            new_prompt = f"{spanish_instruction}Pregunta Original: '{prompt}'.\n\nContexto de otras IAs:\n{context}\n\nRefina tu respuesta con esta información, manteniendo el idioma español."
             tasks_r2.append(globals()[f'call_{model_to_run}'](new_prompt))
+
     refined_results = await asyncio.gather(*tasks_r2)
     refined_responses = {model.lower(): text for model, text in refined_results}
+    
     synthesis_context = "\n\n".join([f"Respuesta de {name.capitalize()}:\n{text}" for name, text in refined_responses.items()])
-    synthesis_prompt = f"Actúa como un analista experto. Pregunta: '{prompt}'. Respuestas refinadas:\n{synthesis_context}\n\nCrea un informe final unificado y coherente."
+    synthesis_prompt = f"Actúa como un analista experto y responde en español. Pregunta: '{prompt}'. Respuestas refinadas:\n{synthesis_context}\n\nCrea un informe final unificado, coherente y bien estructurado en español."
+    
     _, synthesis_text = await call_gemini(synthesis_prompt)
+    
     return jsonify({"refined": refined_responses, "synthesis": synthesis_text})
 
 if __name__ == '__main__':
-    # Esta parte solo se usa para pruebas locales, Render usará el comando 'gunicorn'.
     app.run(host='0.0.0.0', port=10000)
-
