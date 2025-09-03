@@ -4,3 +4,4 @@ httpx
 anthropic
 flask-cors
 uvicorn
+asgiref
