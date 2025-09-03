@@ -95,7 +95,7 @@ async def stream_claude(prompt):
 
 # --- RUTAS DE LA APLICACIÓN ---
 @app.route('/api/generate', methods=['POST'])
-async def generate_initial_stream(): # <<< LA SOLUCIÓN: AÑADIR ASYNC AQUÍ
+async def generate_initial_stream(): # <<< LA SOLUCIÓN ESTÁ AQUÍ
     data = request.json
     prompt = data.get('prompt')
     if not prompt:
@@ -132,6 +132,4 @@ def refine_and_synthesize():
     })
 
 # --- APLICACIÓN DEL WRAPPER DE COMPATIBILILIDAD ---
-# Dejamos el wrapper por máxima compatibilidad
 app = WsgiToAsgi(app)
-
