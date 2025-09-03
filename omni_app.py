@@ -1,6 +1,6 @@
 # ==============================================================================
-# OMNIQUERY - SERVIDOR DE PROTOTIPO FUNCIONAL v3.5
-# Versión con la corrección final: la ruta de streaming es declarada async.
+# OMNIQUERY - SERVIDOR DE PROTOTIPO FUNCIONAL v4.0
+# Versión final simplificada: Se elimina el wrapper WsgiToAsgi innecesario.
 # ==============================================================================
 import asyncio
 import httpx
@@ -9,7 +9,7 @@ import json
 from flask import Flask, request, Response, jsonify
 from flask_cors import CORS
 from anthropic import AsyncAnthropic
-from asgiref.wsgi import WsgiToAsgi
+# La línea 'from asgiref.wsgi import WsgiToAsgi' HA SIDO ELIMINADA
 
 # --- CONFIGURACIÓN DE CLAVES DE API ---
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
@@ -30,7 +30,7 @@ def get_initial_prompt(user_prompt):
 **Consulta del Usuario:**
 "{user_prompt}"
 """
-# --- NUEVAS FUNCIONES DE STREAMING PARA CADA IA ---
+# --- NUEVAS FUNCIONES DE STREAMING ---
 async def stream_gemini(prompt):
     if not GOOGLE_API_KEY:
         yield {"model": "gemini", "chunk": "Error: GOOGLE_API_KEY no está configurada."}
@@ -95,7 +95,7 @@ async def stream_claude(prompt):
 
 # --- RUTAS DE LA APLICACIÓN ---
 @app.route('/api/generate', methods=['POST'])
-async def generate_initial_stream(): # <<< LA SOLUCIÓN ESTÁ AQUÍ
+async def generate_initial_stream():
     data = request.json
     prompt = data.get('prompt')
     if not prompt:
@@ -131,5 +131,4 @@ def refine_and_synthesize():
         "synthesis": "La función de refinamiento y síntesis está en desarrollo para ser compatible con el modo streaming. ¡Vuelve pronto!"
     })
 
-# --- APLICACIÓN DEL WRAPPER DE COMPATIBILILIDAD ---
-app = WsgiToAsgi(app)
+# La línea 'app = WsgiToAsgi(app)' HA SIDO ELIMINADA
