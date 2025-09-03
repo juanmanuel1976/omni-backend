@@ -1,6 +1,6 @@
 # ==============================================================================
-# OMNIQUERY - SERVIDOR DE PROTOTIPO FUNCIONAL v3.1
-# Versión con corrección de error 500. Streaming funcional.
+# OMNIQUERY - SERVIDOR DE PROTOTIPO FUNCIONAL v3.2
+# Versión con parser de Gemini robusto y corrección de timeout implícita.
 # ==============================================================================
 import asyncio
 import httpx
@@ -17,8 +17,7 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
 # --- INICIALIZACIÓN DE LA APLICACIÓN FLASK ---
 app = Flask(__name__)
-# Se configura CORS para permitir peticiones desde cualquier origen.
-CORS(app) 
+CORS(app)
 
 # --- PROMPT INICIAL MEJORADO ---
 def get_initial_prompt(user_prompt):
@@ -43,21 +42,16 @@ async def stream_gemini(prompt):
                     yield {"model": "gemini", "chunk": f"Error Gemini: {error_text.decode()}"}
                     return
                 
-                buffer = ""
-                async for chunk in response.aiter_bytes():
-                    buffer += chunk.decode('utf-8')
-                    # Buscamos en el buffer por patrones de texto completos
-                    while '"text": "' in buffer:
-                        start_index = buffer.find('"text": "') + len('"text": "')
-                        end_index = buffer.find('"', start_index)
-                        if end_index != -1:
-                            text = buffer[start_index:end_index]
-                            buffer = buffer[end_index+1:]
-                            # Decodificamos secuencias de escape de JSON como \n
-                            clean_text = text.encode().decode('unicode_escape')
+                async for line in response.aiter_lines():
+                    if '"text": "' in line:
+                        try:
+                            # Extrae el contenido de la clave "text"
+                            text_content = line.split('"text": "')[1].rsplit('"', 1)[0]
+                            # Reemplaza las secuencias de escape más comunes de forma segura
+                            clean_text = text_content.replace('\\n', '\n').replace('\\"', '"')
                             yield {"model": "gemini", "chunk": clean_text}
-                        else:
-                            break # No se encontró comilla de cierre, esperar más datos
+                        except IndexError:
+                            continue # Línea mal formada, la ignoramos
     except Exception as e:
         yield {"model": "gemini", "chunk": f" Error en stream Gemini: {e}"}
 
@@ -75,8 +69,7 @@ async def stream_deepseek(prompt):
                 async for line in response.aiter_lines():
                     if line.startswith('data: '):
                         data_str = line[6:]
-                        if data_str.strip() == '[DONE]':
-                            break
+                        if data_str.strip() == '[DONE]': break
                         try:
                             data = json.loads(data_str)
                             if 'choices' in data and data['choices'][0]['delta'].get('content'):
@@ -89,16 +82,13 @@ async def stream_deepseek(prompt):
 async def stream_claude(prompt):
     try:
         client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY, timeout=120.0)
-        async with client.messages.stream(
-            model="claude-3-haiku-20240307", max_tokens=4096,
-            messages=[{"role": "user", "content": prompt}]
-        ) as stream:
+        async with client.messages.stream(model="claude-3-haiku-20240307", max_tokens=4096, messages=[{"role": "user", "content": prompt}]) as stream:
             async for text in stream.text_stream:
                 yield {"model": "claude", "chunk": text}
     except Exception as e:
         yield {"model": "claude", "chunk": f" Error en stream Claude: {e}"}
 
-# --- RUTA DE GENERACIÓN MODIFICADA PARA STREAMING ---
+# --- RUTA DE GENERACIÓN PARA STREAMING ---
 @app.route('/api/generate', methods=['POST'])
 async def generate_initial_stream():
     data = request.json
@@ -109,47 +99,36 @@ async def generate_initial_stream():
     initial_prompt = get_initial_prompt(prompt)
 
     async def event_stream():
+        # Diccionario para mantener las tareas activas
         tasks = {
-            "gemini": asyncio.create_task(stream_gemini(initial_prompt)),
-            "deepseek": asyncio.create_task(stream_deepseek(initial_prompt)),
-            "claude": asyncio.create_task(stream_claude(initial_prompt))
+            "gemini": stream_gemini(initial_prompt),
+            "deepseek": stream_deepseek(initial_prompt),
+            "claude": stream_claude(initial_prompt)
         }
+        # Creamos tareas para obtener el primer resultado de cada stream
+        pending_tasks = [asyncio.create_task(tasks[name].__anext__(), name=name) for name in tasks]
 
-        async def get_next(model_name):
-            try:
-                # Obtenemos el siguiente trozo del generador
-                return await tasks[model_name].__anext__()
-            except StopAsyncIteration:
-                return None
-
-        # Mientras haya tareas activas
-        while tasks:
-            # Creamos tareas para obtener el siguiente trozo de cada stream activo
-            futures = {asyncio.create_task(get_next(name)): name for name in tasks}
-            done, pending = await asyncio.wait(futures.keys(), return_when=asyncio.FIRST_COMPLETED)
-            
-            for future in done:
-                model_name = futures[future]
-                result = future.result()
-                if result:
+        while pending_tasks:
+            done, pending_tasks = await asyncio.wait(pending_tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                model_name = task.get_name()
+                try:
+                    result = task.result()
                     yield f"data: {json.dumps(result)}\n\n"
-                else:
-                    # Este stream ha terminado, lo quitamos de las tareas activas
-                    del tasks[model_name]
-            
-            for future in pending:
-                future.cancel()
+                    # Si el stream no ha terminado, creamos una nueva tarea para obtener el siguiente elemento
+                    new_task = asyncio.create_task(tasks[model_name].__anext__(), name=model_name)
+                    pending_tasks.add(new_task)
+                except StopAsyncIteration:
+                    # Este stream ha terminado
+                    continue
         
         yield f"data: {json.dumps({'model': 'system', 'chunk': 'DONE'})}\n\n"
 
     return Response(event_stream(), mimetype='text/event-stream')
 
-# --- RUTA DE REFINAMIENTO (TEMPORALMENTE SIMPLIFICADA PARA EVITAR ERRORES) ---
+# --- RUTA DE REFINAMIENTO (SIMPLIFICADA) ---
 @app.route('/api/refine', methods=['POST'])
 async def refine_and_synthesize():
-    # NOTA: La lógica de refinamiento completa necesita ser reimplementada
-    # para ser compatible con el nuevo código de streaming. Por ahora,
-    # devolvemos una respuesta de marcador de posición para evitar el error 500.
     return jsonify({
         "refined": {},
         "synthesis": "La función de refinamiento y síntesis está en desarrollo para ser compatible con el modo streaming. ¡Vuelve pronto!"
