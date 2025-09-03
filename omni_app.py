@@ -9,7 +9,6 @@ import json
 from flask import Flask, request, Response, jsonify
 from flask_cors import CORS
 from anthropic import AsyncAnthropic
-# La línea 'from asgiref.wsgi import WsgiToAsgi' HA SIDO ELIMINADA
 
 # --- CONFIGURACIÓN DE CLAVES DE API ---
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
@@ -130,5 +129,3 @@ def refine_and_synthesize():
         "refined": {},
         "synthesis": "La función de refinamiento y síntesis está en desarrollo para ser compatible con el modo streaming. ¡Vuelve pronto!"
     })
-
-# La línea 'app = WsgiToAsgi(app)' HA SIDO ELIMINADA
