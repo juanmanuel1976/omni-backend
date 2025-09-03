@@ -1,6 +1,5 @@
-flask[async]
-gunicorn
+fastapi
+uvicorn[standard]
 httpx
 anthropic
-flask-cors
-gevent
+python-multipart
