@@ -1,6 +1,6 @@
 # ==============================================================================
-# OMNIQUERY - SERVIDOR DE PROTOTIPO FUNCIONAL v3.3
-# Versión con wrapper WsgiToAsgi para compatibilidad definitiva.
+# OMNIQUERY - SERVIDOR DE PROTOTIPO FUNCIONAL v3.4
+# Versión con corrección final del orden de inicialización del wrapper.
 # ==============================================================================
 import asyncio
 import httpx
@@ -9,7 +9,7 @@ import json
 from flask import Flask, request, Response, jsonify
 from flask_cors import CORS
 from anthropic import AsyncAnthropic
-from asgiref.wsgi import WsgiToAsgi # <<< PASO 2.A: IMPORTAR EL TRADUCTOR
+from asgiref.wsgi import WsgiToAsgi # Se importa el traductor
 
 # --- CONFIGURACIÓN DE CLAVES DE API ---
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
@@ -17,13 +17,10 @@ DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
 # --- INICIALIZACIÓN DE LA APLICACIÓN FLASK ---
+# Primero, creamos la app de Flask normalmente
 app = Flask(__name__)
 CORS(app)
 
-# --- APLICACIÓN DEL WRAPPER DE COMPATIBILIDAD ---
-app = WsgiToAsgi(app) # <<< PASO 2.B: ENVOLVER LA APP PARA QUE HABLE ASGI
-
-# (El resto del código es exactamente el mismo que la versión 3.2)
 # --- PROMPT INICIAL MEJORADO ---
 def get_initial_prompt(user_prompt):
     return f"""
@@ -97,8 +94,8 @@ async def stream_claude(prompt):
     except Exception as e:
         yield {"model": "claude", "chunk": f" Error en stream Claude: {e}"}
 
-# --- RUTA DE GENERACIÓN PARA STREAMING ---
-# (Esta función no necesita ser asíncrona a nivel de Flask porque el wrapper se encarga)
+# --- RUTAS DE LA APLICACIÓN ---
+# Ahora definimos las rutas sobre el objeto 'app' de Flask
 @app.route('/api/generate', methods=['POST'])
 def generate_initial_stream():
     data = request.json
@@ -108,7 +105,6 @@ def generate_initial_stream():
     initial_prompt = get_initial_prompt(prompt)
     
     async def event_stream():
-        # (La lógica interna asíncrona sigue igual)
         tasks = {
             "gemini": stream_gemini(initial_prompt),
             "deepseek": stream_deepseek(initial_prompt),
@@ -130,7 +126,6 @@ def generate_initial_stream():
     
     return Response(event_stream(), mimetype='text/event-stream')
 
-# --- RUTA DE REFINAMIENTO (SIMPLIFICADA) ---
 @app.route('/api/refine', methods=['POST'])
 def refine_and_synthesize():
     return jsonify({
@@ -138,4 +133,6 @@ def refine_and_synthesize():
         "synthesis": "La función de refinamiento y síntesis está en desarrollo para ser compatible con el modo streaming. ¡Vuelve pronto!"
     })
 
-# (La sección if __name__ == '__main__' se elimina porque no es relevante para Render)
+# --- APLICACIÓN DEL WRAPPER DE COMPATIBILIDAD ---
+# Después de definir TODAS las rutas, इenvolvemos" la app para el servidor.
+app = WsgiToAsgi(app)
