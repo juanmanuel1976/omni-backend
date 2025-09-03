@@ -1,13 +1,15 @@
 # ==============================================================================
-# OMNIQUERY - SERVIDOR DE PROTOTIPO FUNCIONAL v4.0
-# Versión final simplificada: Se elimina el wrapper WsgiToAsgi innecesario.
+# OMNIQUERY - SERVIDOR FASTAPI v5.0
+# Versión nativa ASGI compatible con uvicorn
 # ==============================================================================
 import asyncio
 import httpx
 import os
 import json
-from flask import Flask, request, Response, jsonify
-from flask_cors import CORS
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from anthropic import AsyncAnthropic
 
 # --- CONFIGURACIÓN DE CLAVES DE API ---
@@ -15,9 +17,26 @@ GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
-# --- INICIALIZACIÓN DE LA APLICACIÓN FLASK ---
-app = Flask(__name__)
-CORS(app)
+# --- INICIALIZACIÓN DE LA APLICACIÓN FASTAPI ---
+app = FastAPI(title="OmniQuery API")
+
+# Configurar CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- MODELOS PYDANTIC ---
+class GenerateRequest(BaseModel):
+    prompt: str
+
+class RefineRequest(BaseModel):
+    prompt: str
+    decisions: dict
+    initial_responses: dict
 
 # --- PROMPT INICIAL MEJORADO ---
 def get_initial_prompt(user_prompt):
@@ -29,7 +48,8 @@ def get_initial_prompt(user_prompt):
 **Consulta del Usuario:**
 "{user_prompt}"
 """
-# --- NUEVAS FUNCIONES DE STREAMING ---
+
+# --- FUNCIONES DE STREAMING ---
 async def stream_gemini(prompt):
     if not GOOGLE_API_KEY:
         yield {"model": "gemini", "chunk": "Error: GOOGLE_API_KEY no está configurada."}
@@ -52,7 +72,7 @@ async def stream_gemini(prompt):
                         except IndexError:
                             continue
     except Exception as e:
-        yield {"model": "gemini", "chunk": f" Error en stream Gemini: {e}"}
+        yield {"model": "gemini", "chunk": f"Error en stream Gemini: {e}"}
 
 async def stream_deepseek(prompt):
     if not DEEPSEEK_API_KEY:
@@ -78,7 +98,7 @@ async def stream_deepseek(prompt):
                         except json.JSONDecodeError:
                             continue
     except Exception as e:
-        yield {"model": "deepseek", "chunk": f" Error en stream DeepSeek: {e}"}
+        yield {"model": "deepseek", "chunk": f"Error en stream DeepSeek: {e}"}
 
 async def stream_claude(prompt):
     if not ANTHROPIC_API_KEY:
@@ -90,16 +110,15 @@ async def stream_claude(prompt):
             async for text in stream.text_stream:
                 yield {"model": "claude", "chunk": text}
     except Exception as e:
-        yield {"model": "claude", "chunk": f" Error en stream Claude: {e}"}
+        yield {"model": "claude", "chunk": f"Error en stream Claude: {e}"}
 
 # --- RUTAS DE LA APLICACIÓN ---
-@app.route('/api/generate', methods=['POST'])
-async def generate_initial_stream():
-    data = request.json
-    prompt = data.get('prompt')
-    if not prompt:
-        return Response(json.dumps({"error": "No prompt provided"}), status=400, mimetype='application/json')
-    initial_prompt = get_initial_prompt(prompt)
+@app.post('/api/generate')
+async def generate_initial_stream(request: GenerateRequest):
+    if not request.prompt:
+        raise HTTPException(status_code=400, detail="No prompt provided")
+    
+    initial_prompt = get_initial_prompt(request.prompt)
     
     async def event_stream():
         tasks = {
@@ -108,6 +127,7 @@ async def generate_initial_stream():
             "claude": stream_claude(initial_prompt)
         }
         pending_tasks = [asyncio.create_task(tasks[name].__anext__(), name=name) for name in tasks]
+        
         while pending_tasks:
             done, pending_tasks = await asyncio.wait(pending_tasks, return_when=asyncio.FIRST_COMPLETED)
             for task in done:
@@ -119,13 +139,22 @@ async def generate_initial_stream():
                     pending_tasks.add(new_task)
                 except StopAsyncIteration:
                     continue
+        
         yield f"data: {json.dumps({'model': 'system', 'chunk': 'DONE'})}\n\n"
     
-    return Response(event_stream(), mimetype='text/event-stream')
+    return StreamingResponse(event_stream(), media_type='text/event-stream')
 
-@app.route('/api/refine', methods=['POST'])
-def refine_and_synthesize():
-    return jsonify({
+@app.post('/api/refine')
+async def refine_and_synthesize(request: RefineRequest):
+    return {
         "refined": {},
         "synthesis": "La función de refinamiento y síntesis está en desarrollo para ser compatible con el modo streaming. ¡Vuelve pronto!"
-    })
+    }
+
+@app.get("/")
+async def root():
+    return {"message": "OmniQuery API v5.0 - FastAPI"}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
