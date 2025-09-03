@@ -1,6 +1,6 @@
 # ==============================================================================
-# OMNIQUERY - SERVIDOR FASTAPI v5.0
-# Versión nativa ASGI compatible con uvicorn
+# OMNIQUERY - SERVIDOR FASTAPI v5.1 (con Síntesis Final)
+# Versión nativa ASGI compatible con uvicorn y con lógica de refinamiento.
 # ==============================================================================
 import asyncio
 import httpx
@@ -111,6 +111,62 @@ async def stream_claude(prompt):
                 yield {"model": "claude", "chunk": text}
     except Exception as e:
         yield {"model": "claude", "chunk": f"Error en stream Claude: {e}"}
+        
+# --- SÍNTESIS FINAL ---
+def build_refine_prompt(original_prompt, highlighted, normal):
+    """Construye el prompt para la síntesis basado en las decisiones del usuario."""
+    
+    prompt_parts = [
+        "**ROL Y OBJETIVO:** Eres un analista experto encargado de sintetizar múltiples perspectivas de IA en una única respuesta superior, coherente y bien estructurada. Tu respuesta debe estar exclusivamente en español.",
+        "",
+        f"**CONSULTA ORIGINAL DEL USUARIO:**\n\"{original_prompt}\"",
+        ""
+    ]
+    
+    if highlighted:
+        prompt_parts.append("**PERSPECTIVA DESTACADA (Fuente principal para tu análisis):**")
+        for model, content in highlighted.items():
+            prompt_parts.extend([f"**Respuesta de {model.title()}:**\n{content}", ""])
+    
+    if normal:
+        prompt_parts.append("**PERSPECTIVAS ADICIONALES (Contexto secundario para enriquecer la respuesta):**")
+        for model, content in normal.items():
+            prompt_parts.extend([f"**Respuesta de {model.title()}:**\n{content}", ""])
+    
+    prompt_parts.extend([
+        "**TAREA FINAL:**",
+        "Basándote en la consulta original y, sobre todo, en la **perspectiva destacada**, genera un informe final unificado.",
+        "Tu informe debe:",
+        "- Integrar los puntos más fuertes de la respuesta destacada de forma fluida.",
+        "- Usar las perspectivas adicionales solo para añadir detalles o matices que enriquezcan la idea central, sin contradecirla.",
+        "- Ser más completo, claro y refinado que cualquiera de las respuestas individuales.",
+        "- Mantener un tono profesional y directo.",
+        "\n**COMIENZA TU SÍNTESIS FINAL AQUÍ:**"
+    ])
+    
+    return "\n".join(prompt_parts)
+
+async def generate_synthesis_with_gemini(prompt):
+    """Genera la síntesis usando Gemini (sin streaming)."""
+    if not GOOGLE_API_KEY:
+        raise Exception("GOOGLE_API_KEY no está configurada")
+    
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GOOGLE_API_KEY}"
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+        
+        response = await client.post(url, json=payload)
+        
+        if response.status_code != 200:
+            raise Exception(f"Error de Gemini: {response.status_code} - {response.text}")
+        
+        result = response.json()
+        
+        try:
+            return result["candidates"][0]["content"]["parts"][0]["text"]
+        except (KeyError, IndexError):
+            raise Exception("Formato de respuesta inesperado de Gemini")
+
 
 # --- RUTAS DE LA APLICACIÓN ---
 @app.post('/api/generate')
@@ -146,14 +202,20 @@ async def generate_initial_stream(request: GenerateRequest):
 
 @app.post('/api/refine')
 async def refine_and_synthesize(request: RefineRequest):
-    return {
-        "refined": {},
-        "synthesis": "La función de refinamiento y síntesis está en desarrollo para ser compatible con el modo streaming. ¡Vuelve pronto!"
-    }
+    highlighted = {m: c['content'] for m, c in request.initial_responses.items() if request.decisions.get(m) == 'highlight'}
+    normal = {m: c['content'] for m, c in request.initial_responses.items() if request.decisions.get(m) == 'normal'}
+
+    synthesis_prompt = build_refine_prompt(request.prompt, highlighted, normal)
+    
+    try:
+        final_synthesis = await generate_synthesis_with_gemini(synthesis_prompt)
+        return {"synthesis": final_synthesis}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
 async def root():
-    return {"message": "OmniQuery API v5.0 - FastAPI"}
+    return {"message": "OmniQuery API v5.1 - FastAPI con Síntesis Final"}
 
 @app.get("/health")
 async def health_check():
