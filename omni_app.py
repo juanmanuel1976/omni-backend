@@ -1,6 +1,6 @@
 # ==============================================================================
-# OMNIQUERY - SERVIDOR DE PROTOTIPO FUNCIONAL v3.4
-# Versión con corrección final del orden de inicialización del wrapper.
+# OMNIQUERY - SERVIDOR DE PROTOTIPO FUNCIONAL v3.5
+# Versión con la corrección final: la ruta de streaming es declarada async.
 # ==============================================================================
 import asyncio
 import httpx
@@ -9,7 +9,7 @@ import json
 from flask import Flask, request, Response, jsonify
 from flask_cors import CORS
 from anthropic import AsyncAnthropic
-from asgiref.wsgi import WsgiToAsgi # Se importa el traductor
+from asgiref.wsgi import WsgiToAsgi
 
 # --- CONFIGURACIÓN DE CLAVES DE API ---
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
@@ -17,7 +17,6 @@ DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
 # --- INICIALIZACIÓN DE LA APLICACIÓN FLASK ---
-# Primero, creamos la app de Flask normalmente
 app = Flask(__name__)
 CORS(app)
 
@@ -95,9 +94,8 @@ async def stream_claude(prompt):
         yield {"model": "claude", "chunk": f" Error en stream Claude: {e}"}
 
 # --- RUTAS DE LA APLICACIÓN ---
-# Ahora definimos las rutas sobre el objeto 'app' de Flask
 @app.route('/api/generate', methods=['POST'])
-def generate_initial_stream():
+async def generate_initial_stream(): # <<< LA SOLUCIÓN: AÑADIR ASYNC AQUÍ
     data = request.json
     prompt = data.get('prompt')
     if not prompt:
@@ -133,6 +131,7 @@ def refine_and_synthesize():
         "synthesis": "La función de refinamiento y síntesis está en desarrollo para ser compatible con el modo streaming. ¡Vuelve pronto!"
     })
 
-# --- APLICACIÓN DEL WRAPPER DE COMPATIBILIDAD ---
-# Después de definir TODAS las rutas, इenvolvemos" la app para el servidor.
+# --- APLICACIÓN DEL WRAPPER DE COMPATIBILILIDAD ---
+# Dejamos el wrapper por máxima compatibilidad
 app = WsgiToAsgi(app)
+
