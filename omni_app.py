@@ -1,6 +1,6 @@
 # ==============================================================================
-# OMNIQUERY - SERVIDOR DE PROTOTIPO FUNCIONAL v3.2
-# Versión con parser de Gemini robusto y corrección de timeout implícita.
+# OMNIQUERY - SERVIDOR DE PROTOTIPO FUNCIONAL v3.3
+# Versión con wrapper WsgiToAsgi para compatibilidad definitiva.
 # ==============================================================================
 import asyncio
 import httpx
@@ -9,6 +9,7 @@ import json
 from flask import Flask, request, Response, jsonify
 from flask_cors import CORS
 from anthropic import AsyncAnthropic
+from asgiref.wsgi import WsgiToAsgi # <<< PASO 2.A: IMPORTAR EL TRADUCTOR
 
 # --- CONFIGURACIÓN DE CLAVES DE API ---
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
@@ -19,6 +20,10 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 app = Flask(__name__)
 CORS(app)
 
+# --- APLICACIÓN DEL WRAPPER DE COMPATIBILIDAD ---
+app = WsgiToAsgi(app) # <<< PASO 2.B: ENVOLVER LA APP PARA QUE HABLE ASGI
+
+# (El resto del código es exactamente el mismo que la versión 3.2)
 # --- PROMPT INICIAL MEJORADO ---
 def get_initial_prompt(user_prompt):
     return f"""
@@ -29,7 +34,6 @@ def get_initial_prompt(user_prompt):
 **Consulta del Usuario:**
 "{user_prompt}"
 """
-
 # --- NUEVAS FUNCIONES DE STREAMING PARA CADA IA ---
 async def stream_gemini(prompt):
     if not GOOGLE_API_KEY:
@@ -44,7 +48,6 @@ async def stream_gemini(prompt):
                     error_text = await response.aread()
                     yield {"model": "gemini", "chunk": f"Error Gemini: {error_text.decode()}"}
                     return
-                
                 async for line in response.aiter_lines():
                     if '"text": "' in line:
                         try:
@@ -69,7 +72,6 @@ async def stream_deepseek(prompt):
                     error_text = await response.aread()
                     yield {"model": "deepseek", "chunk": f"Error DeepSeek: {error_text.decode()}"}
                     return
-                
                 async for line in response.aiter_lines():
                     if line.startswith('data: '):
                         data_str = line[6:]
@@ -96,23 +98,23 @@ async def stream_claude(prompt):
         yield {"model": "claude", "chunk": f" Error en stream Claude: {e}"}
 
 # --- RUTA DE GENERACIÓN PARA STREAMING ---
+# (Esta función no necesita ser asíncrona a nivel de Flask porque el wrapper se encarga)
 @app.route('/api/generate', methods=['POST'])
-async def generate_initial_stream():
+def generate_initial_stream():
     data = request.json
     prompt = data.get('prompt')
     if not prompt:
         return Response(json.dumps({"error": "No prompt provided"}), status=400, mimetype='application/json')
-
     initial_prompt = get_initial_prompt(prompt)
-
+    
     async def event_stream():
+        # (La lógica interna asíncrona sigue igual)
         tasks = {
             "gemini": stream_gemini(initial_prompt),
             "deepseek": stream_deepseek(initial_prompt),
             "claude": stream_claude(initial_prompt)
         }
         pending_tasks = [asyncio.create_task(tasks[name].__anext__(), name=name) for name in tasks]
-
         while pending_tasks:
             done, pending_tasks = await asyncio.wait(pending_tasks, return_when=asyncio.FIRST_COMPLETED)
             for task in done:
@@ -124,18 +126,16 @@ async def generate_initial_stream():
                     pending_tasks.add(new_task)
                 except StopAsyncIteration:
                     continue
-        
         yield f"data: {json.dumps({'model': 'system', 'chunk': 'DONE'})}\n\n"
-
+    
     return Response(event_stream(), mimetype='text/event-stream')
 
 # --- RUTA DE REFINAMIENTO (SIMPLIFICADA) ---
 @app.route('/api/refine', methods=['POST'])
-async def refine_and_synthesize():
+def refine_and_synthesize():
     return jsonify({
         "refined": {},
         "synthesis": "La función de refinamiento y síntesis está en desarrollo para ser compatible con el modo streaming. ¡Vuelve pronto!"
     })
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000, debug=True)
+# (La sección if __name__ == '__main__' se elimina porque no es relevante para Render)
