@@ -1,5 +1,5 @@
 # ==============================================================================
-# OMNIQUERY - SERVIDOR FASTAPI v7.0 (con Opción de Resumen o Informe)
+# OMNIQUERY - SERVIDOR FASTAPI v8.0 (con Memoria Conversacional)
 # ==============================================================================
 import asyncio
 import httpx
@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Literal
+from typing import Literal, List, Dict
 
 from anthropic import AsyncAnthropic
 
@@ -27,68 +27,63 @@ app.add_middleware(
 )
 
 # --- MODELOS PYDANTIC ---
+# MODIFICADO: GenerateRequest ahora acepta un historial opcional
 class GenerateRequest(BaseModel):
     prompt: str
+    history: List[Dict[str, str]] = []
 
 class RefineRequest(BaseModel):
     prompt: str
     decisions: dict
     initial_responses: dict
-    # NUEVO: Campo para que el frontend elija el tipo de síntesis
     synthesis_type: Literal['summary', 'report'] = 'summary'
 
-# --- SISTEMA DE PROMPTS ---
-def get_initial_prompt(user_prompt):
-    return f"**Instrucciones:** Responde en español, de forma muy breve y directa a la siguiente consulta del usuario: \"{user_prompt}\""
+# --- SISTEMA DE PROMPTS CON MEMORIA ---
 
-def get_deepseek_initial_prompt(user_prompt):
-    return f"**Rol:** Eres un analista de estrategias. No escribas un 'Resumen Ejecutivo'. **Tarea:** Identifica y describe brevemente (en 2-3 puntos) las diferentes perspectivas o ángulos desde los cuales se podría analizar la siguiente consulta del usuario: \"{user_prompt}\""
-
-# NUEVO: Prompt específico para el resumen simple
-def build_summary_prompt(user_prompt, highlighted, normal):
-    context = ""
-    if highlighted:
-        context += "**PERSPECTIVA DESTACADA (Fuente principal):**\n"
-        for model, content in highlighted.items(): context += f"**Respuesta de {model.title()}:**\n{content}\n\n"
-    if normal:
-        context += "**PERSPECTIVAS ADICIONALES (Contexto secundario):**\n"
-        for model, content in normal.items(): context += f"**Respuesta de {model.title()}:**\n{content}\n\n"
+def build_history_context(history: List[Dict[str, str]]) -> str:
+    """Construye una cadena de texto formateada a partir del historial."""
+    if not history:
+        return ""
     
+    context = ["**Historial de la Conversación Anterior (Contexto Clave):**"]
+    for i, turn in enumerate(history):
+        context.append(f"**Turno {i+1} - Consulta del Usuario:**\n{turn.get('prompt', '')}")
+        context.append(f"**Turno {i+1} - Informe Generado por IA:**\n{turn.get('synthesis', '')}")
+        context.append("---")
+    return "\n".join(context)
+
+def get_initial_prompt(user_prompt, history: List[Dict[str, str]] = []):
+    """Prompt general para Gemini y Claude, ahora con historial."""
+    history_context = build_history_context(history)
     return f"""
-**Rol:** Eres un sintetizador experto.
-**Tarea:** Basado en la consulta original del usuario y las perspectivas de IA proporcionadas, crea un **resumen final conciso y unificado**. Integra los puntos más fuertes de la perspectiva destacada y usa las adicionales para añadir matices. La respuesta debe ser fluida, clara y directa.
-**Consulta Original:** "{user_prompt}"
-**Perspectivas de IA:**
-{context}
-**COMIENZA TU RESUMEN FINAL AQUÍ:**
+{history_context}
+
+**Instrucciones para la Respuesta Actual:**
+1.  **Considera el Historial:** Basa tu respuesta en la nueva consulta del usuario, pero utiliza el historial anterior como contexto fundamental.
+2.  **Idioma y Estilo:** Responde en español, de forma breve y directa. Ofrece los puntos clave o una respuesta inicial clara a la consulta actual.
+
+**Consulta Actual del Usuario:**
+"{user_prompt}"
 """
 
-# MODIFICADO: Renombrado para mayor claridad
-def build_detailed_report_prompt(user_prompt, highlighted, normal):
-    context = ""
-    if highlighted:
-        context += "**PERSPECTIVA DESTACADA (Fuente principal):**\n"
-        for model, content in highlighted.items(): context += f"**Respuesta de {model.title()}:**\n{content}\n\n"
-    if normal:
-        context += "**PERSPECTIVAS ADICIONALES (Contexto secundario):**\n"
-        for model, content in normal.items(): context += f"**Respuesta de {model.title()}:**\n{content}\n\n"
-    
+def get_deepseek_initial_prompt(user_prompt, history: List[Dict[str, str]] = []):
+    """Prompt específico para DeepSeek, ahora con historial."""
+    history_context = build_history_context(history)
     return f"""
-**Rol:** Actúa como un analista experto. Tu tarea es crear un **informe detallado**.
-**Consulta Original:** "{user_prompt}"
-**Análisis Preliminares:**
-{context}
-**Instrucciones para el Informe Detallado:**
-Elabora un informe estructurado con las siguientes secciones obligatorias en Markdown:
-1.  **Título Ejecutivo:** Claro y conciso.
-2.  **Resumen Ejecutivo (TL;DR):** 2-3 frases con las conclusiones clave.
-3.  **Análisis Comparativo:** Discute los puntos de convergencia y divergencia entre las IAs.
-4.  **Síntesis Profunda:** Integra las perspectivas en una narrativa unificada, añadiendo conclusiones inferidas.
-5.  **Puntos Clave / Accionables:** Una lista final de 3 a 5 puntos importantes.
+{history_context}
+
+**Rol:** Eres un analista de estrategias.
+**Tarea para la Consulta Actual:**
+Considerando el historial, tu objetivo es identificar y describir brevemente (2-3 puntos) las **nuevas perspectivas o ángulos** para analizar la consulta actual del usuario. No repitas análisis anteriores.
+
+**Consulta Actual del Usuario:**
+"{user_prompt}"
 """
 
-# --- FUNCIONES DE STREAMING Y SÍNTESIS (sin cambios, excepto la lógica de selección de prompt) ---
-# ... (stream_gemini, stream_deepseek, stream_claude, generate_synthesis_with_gemini sin cambios) ...
+# ... (El resto de omni_app.py, incluyendo las funciones de streaming y de síntesis, no necesita cambios) ...
+# ... Las funciones build_summary_prompt y build_detailed_report_prompt ya usan el `user_prompt` que contendrá la pregunta de refinamiento ...
+
+# --- FUNCIONES DE STREAMING ---
 async def stream_gemini(prompt):
     if not GOOGLE_API_KEY:
         yield {"model": "gemini", "chunk": "Error: GOOGLE_API_KEY no está configurada."}
@@ -151,22 +146,59 @@ async def stream_claude(prompt):
     except Exception as e:
         yield {"model": "claude", "chunk": f"Error en stream Claude: {e}"}
 
+# --- SÍNTESIS FINAL ---
+def build_summary_prompt(user_prompt, highlighted, normal):
+    context = ""
+    if highlighted:
+        context += "**PERSPECTIVA DESTACADA (Fuente principal):**\n"
+        for model, content in highlighted.items(): context += f"**Respuesta de {model.title()}:**\n{content}\n\n"
+    if normal:
+        context += "**PERSPECTIVAS ADICIONALES (Contexto secundario):**\n"
+        for model, content in normal.items(): context += f"**Respuesta de {model.title()}:**\n{content}\n\n"
+    
+    return f"""
+**Rol:** Eres un sintetizador experto.
+**Tarea:** Basado en la consulta original del usuario y las perspectivas de IA proporcionadas, crea un **resumen final conciso y unificado**. Integra los puntos más fuertes de la perspectiva destacada y usa las adicionales para añadir matices. La respuesta debe ser fluida, clara y directa.
+**Consulta Original:** "{user_prompt}"
+**Perspectivas de IA:**
+{context}
+**COMIENZA TU RESUMEN FINAL AQUÍ:**
+"""
+
+def build_detailed_report_prompt(user_prompt, highlighted, normal):
+    context = ""
+    if highlighted:
+        context += "**PERSPECTIVA DESTACADA (Fuente principal):**\n"
+        for model, content in highlighted.items(): context += f"**Respuesta de {model.title()}:**\n{content}\n\n"
+    if normal:
+        context += "**PERSPECTIVAS ADICIONALES (Contexto secundario):**\n"
+        for model, content in normal.items(): context += f"**Respuesta de {model.title()}:**\n{content}\n\n"
+    
+    return f"""
+**Rol:** Actúa como un analista experto. Tu tarea es crear un **informe detallado**.
+**Consulta Original:** "{user_prompt}"
+**Análisis Preliminares:**
+{context}
+**Instrucciones para el Informe Detallado:**
+Elabora un informe estructurado con las siguientes secciones obligatorias en Markdown:
+1.  **Título Ejecutivo:** Claro y conciso.
+2.  **Resumen Ejecutivo (TL;DR):** 2-3 frases con las conclusiones clave.
+3.  **Análisis Comparativo:** Discute los puntos de convergencia y divergencia entre las IAs.
+4.  **Síntesis Profunda:** Integra las perspectivas en una narrativa unificada, añadiendo conclusiones inferidas.
+5.  **Puntos Clave / Accionables:** Una lista final de 3 a 5 puntos importantes.
+"""
+
 async def generate_synthesis_with_gemini(prompt):
-    """Genera la síntesis usando Gemini (sin streaming)."""
     if not GOOGLE_API_KEY:
         raise Exception("GOOGLE_API_KEY no está configurada")
     
     async with httpx.AsyncClient(timeout=120.0) as client:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GOOGLE_API_KEY}"
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        
         response = await client.post(url, json=payload)
-        
         if response.status_code != 200:
             raise Exception(f"Error de Gemini: {response.status_code} - {response.text}")
-        
         result = response.json()
-        
         try:
             return result["candidates"][0]["content"]["parts"][0]["text"]
         except (KeyError, IndexError):
@@ -178,8 +210,9 @@ async def generate_initial_stream(request: GenerateRequest):
     if not request.prompt:
         raise HTTPException(status_code=400, detail="No prompt provided")
     
-    general_prompt = get_initial_prompt(request.prompt)
-    deepseek_prompt = get_deepseek_initial_prompt(request.prompt)
+    # MODIFICADO: Pasamos el historial a las funciones de prompt
+    general_prompt = get_initial_prompt(request.prompt, request.history)
+    deepseek_prompt = get_deepseek_initial_prompt(request.prompt, request.history)
     
     async def event_stream():
         tasks = {
@@ -187,7 +220,6 @@ async def generate_initial_stream(request: GenerateRequest):
             "deepseek": stream_deepseek(deepseek_prompt),
             "claude": stream_claude(general_prompt)
         }
-        # ... (resto de la lógica de streaming sin cambios) ...
         pending_tasks = [asyncio.create_task(tasks[name].__anext__(), name=name) for name in tasks]
         
         while pending_tasks:
@@ -203,7 +235,7 @@ async def generate_initial_stream(request: GenerateRequest):
                     continue
         
         yield f"data: {json.dumps({'model': 'system', 'chunk': 'DONE'})}\n\n"
-
+    
     return StreamingResponse(event_stream(), media_type='text/event-stream')
 
 @app.post('/api/refine')
@@ -214,10 +246,9 @@ async def refine_and_synthesize(request: RefineRequest):
     if not highlighted and not normal:
          normal = {m: c['content'] for m, c in request.initial_responses.items() if request.decisions.get(m) != 'discard'}
 
-    # MODIFICADO: Lógica para elegir el prompt correcto
     if request.synthesis_type == 'report':
         synthesis_prompt = build_detailed_report_prompt(request.prompt, highlighted, normal)
-    else: # Por defecto, o si es 'summary'
+    else:
         synthesis_prompt = build_summary_prompt(request.prompt, highlighted, normal)
     
     try:
@@ -228,9 +259,8 @@ async def refine_and_synthesize(request: RefineRequest):
 
 @app.get("/")
 async def root():
-    return {"message": "OmniQuery API v7.0 - FastAPI con Opción de Resumen o Informe"}
+    return {"message": "OmniQuery API v8.0 - FastAPI con Memoria Conversacional"}
 
-# ... (health_check sin cambios) ...
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
