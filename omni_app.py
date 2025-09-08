@@ -80,7 +80,7 @@ def build_contextual_prompt(user_prompt, history, mode):
 """
     
     if history_context:
-        return f"{history_context}\n极{base_prompt}"
+        return f"{history_context}\n{base_prompt}"
     return base_prompt
 
 # --- FUNCIONES DE STREAMING ---
@@ -100,7 +100,7 @@ async def stream_gemini(prompt):
                 async for line in response.aiter_lines():
                     if '"text": "' in line:
                         try:
-                            text_content = line.split('"极text": "')[1].rsplit('"', 1)[0]
+                            text_content = line.split('"text": "')[1].rsplit('"', 1)[0]
                             yield {"model": "gemini", "chunk": text_content.replace('\\n', '\n').replace('\\"', '"')}
                         except IndexError: 
                             continue
@@ -115,15 +115,15 @@ async def stream_deepseek(prompt):
         async with httpx.AsyncClient(timeout=120.0) as client:
             headers = {"Authorization": f"Bearer {DEEPSEEK_API_KEY}"}
             payload = {"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "stream": True}
-            async with client.stream("POST", "https://api.deepseek.com/chat/completions", headers=headers, json=payload) as response:
+            async with client.stream("POST", "https://api.deepseek.com/chat/completions", headers=headers, json=payload)极 response:
                 if response.status_code != 200:
                     error_text = await response.aread()
-                    yield {"model": "deepseek", "极chunk": f"Error: {error_text.decode()}"}
+                    yield {"model": "deepseek", "chunk": f"Error: {error_text.decode()}"}
                     return
                 async for line in response.aiter_lines():
                     if line.startswith('data: '):
                         data_str = line[6:]
-                        if data_str.strip() == '[DONE]': 
+                        if data_str.strip() == '[极DONE]': 
                             break
                         try:
                             data = json.loads(data_str)
@@ -139,7 +139,7 @@ async def stream_claude(prompt):
         yield {"model": "claude", "chunk": "Error: ANTHROPIC_API_KEY no configurada."}
         return
     try:
-        client = Async极Anthropic(api_key=ANTHROPIC_API_KEY, timeout=120.0)
+        client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY, timeout=120.0)
         async with client.messages.stream(model="claude-3-haiku-20240307", max_tokens=4096, messages=[{"role": "user", "content": prompt}]) as stream:
             async for text in stream.text_stream:
                 yield {"model": "claude", "chunk": text}
@@ -147,13 +147,13 @@ async def stream_claude(prompt):
         yield {"model": "claude", "chunk": f"Error: {e}"}
 
 
-# --- FUNCIONES SIN STREAMING (PARA DEBATE AND SÍNTESIS) ---
+# --- FUNCIONES SIN STREAMING (PARA DEBATE Y SÍNTESIS) ---
 async def call_ai_model_no_stream(model_name: str, prompt: str):
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
             if model_name == "gemini":
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GOOGLE_API_KEY}"
-                payload = {"contents": [{"parts": [{"text": prompt}]}]}
+                payload = {"contents": [{"parts极[{"text": prompt}]}]}
                 r = await client.post(url, json=payload)
                 if r.status_code != 200: 
                     return f"Error HTTP {r.status_code}: {r.text}"
@@ -163,7 +163,7 @@ async def call_ai_model_no_stream(model_name: str, prompt: str):
                 payload = {"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}]}
                 r = await client.post("https://api.deepseek.com/chat/completions", headers=headers, json=payload)
                 if r.status_code != 200: 
-                    return f"Error HTTP {r.status_code}: {r.text}"
+                    return f"Error HTTP {r.status_code}: {极r.text}"
                 return r.json()["choices"][0]["message"]["content"]
             elif model_name == "claude":
                 client_anthropic = AsyncAnthropic(api_key=ANTHROPIC_API_KEY, timeout=120.0)
@@ -231,12 +231,12 @@ async def refine_and_synthesize(request: RefineRequest):
     
     synthesis_prompt_parts = [f"**Consulta Original (con su historial):**\n\"{contextual_prompt}\""]
     if request.synthesis_type == 'summary':
-        synthesis_prompt_parts.append("\n**Instrucciones:** Crea极 un resumen ejecutivo, conciso y directo.")
+        synthesis_prompt_parts.append("\n**Instrucciones:** Crea un resumen ejecutivo, conciso y directo.")
     else:
         synthesis_prompt_parts.append("\n**Instrucciones:** Elabora un informe detallado y bien estructurado.")
     if highlighted_response:
         synthesis_prompt_parts.append("\n**PERSPECTIVA DESTACADA (Priorizar):**\n" + highlighted_response)
-    synthesis_prompt_parts.append("\n**RESPUESTAS A CONSIDERAR:**")
+    synthesis_prompt_parts.append("\n极**RESPUESTAS A CONSIDERAR:**")
     for model, content in active_responses.items():
         synthesis_prompt_parts.append(f"**Respuesta de {model.title()}:**\n{content}\n")
     final_prompt = "\n".join(synthesis_prompt_parts)
