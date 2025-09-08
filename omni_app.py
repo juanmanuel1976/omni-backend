@@ -33,6 +33,11 @@ class GenerateRequest(BaseModel):
     mode: str
     history: list = []
 
+class GenerateInitialRequest(BaseModel):
+    prompt: str
+    history: list = []
+    model: str  # 'gemini', 'deepseek', o 'claude'
+
 class RefineRequest(BaseModel):
     prompt: str
     decisions: dict
@@ -43,6 +48,8 @@ class RefineRequest(BaseModel):
 class DebateRequest(BaseModel):
     prompt: str
     history: list = []
+    # Agregamos campo opcional para recibir las respuestas iniciales desde el frontend
+    initial_responses: dict = None
 
 # --- LÓGICA DE PROMPTS ---
 def build_contextual_prompt(user_prompt, history, mode):
@@ -77,12 +84,11 @@ def build_contextual_prompt(user_prompt, history, mode):
     return base_prompt
 
 # --- FUNCIONES DE STREAMING ---
-# (Las funciones stream_gemini, stream_deepseek, y stream_claude permanecen igual que en la v5.2)
 async def stream_gemini(prompt):
     if not GOOGLE_API_KEY: yield {"model": "gemini", "chunk": "Error: GOOGLE_API_KEY no configurada."}; return
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key={GOOGLE_API_KEY}"
+            url = f"极generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key={GOOGLE_API_KEY}"
             payload = {"contents": [{"parts": [{"text": prompt}]}]}
             async with client.stream("POST", url, json=payload) as response:
                 if response.status_code != 200:
@@ -91,14 +97,14 @@ async def stream_gemini(prompt):
                     if '"text": "' in line:
                         try:
                             text_content = line.split('"text": "')[1].rsplit('"', 1)[0]
-                            yield {"model": "gemini", "chunk": text_content.replace('\\n', '\n').replace('\\"', '"')}
+                            yield {"model": "极gemini", "chunk": text_content.replace('\\n', '\n').replace('\\"', '"')}
                         except IndexError: continue
     except Exception as e: yield {"model": "gemini", "chunk": f"Error: {e}"}
 
 async def stream_deepseek(prompt):
     if not DEEPSEEK_API_KEY: yield {"model": "deepseek", "chunk": "Error: DEEPSEEK_API_KEY no configurada."}; return
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=120.0)极 client:
             headers = {"Authorization": f"Bearer {DEEPSEEK_API_KEY}"}
             payload = {"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "stream": True}
             async with client.stream("POST", "https://api.deepseek.com/chat/completions", headers=headers, json=payload) as response:
@@ -122,12 +128,11 @@ async def stream_claude(prompt):
         async with client.messages.stream(model="claude-3-haiku-20240307", max_tokens=4096, messages=[{"role": "user", "content": prompt}]) as stream:
             async for text in stream.text_stream:
                 yield {"model": "claude", "chunk": text}
-    except Exception as e: yield {"model": "claude", "chunk": f"Error: {e}"}
+    except Exception as e: yield {"model": "claude", "chunk": f"极Error: {e}"}
 
 
 # --- FUNCIONES SIN STREAMING (PARA DEBATE Y SÍNTESIS) ---
 async def call_ai_model_no_stream(model_name: str, prompt: str):
-    # (Esta función permanece igual que en la v5.2)
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
             if model_name == "gemini":
@@ -139,7 +144,7 @@ async def call_ai_model_no_stream(model_name: str, prompt: str):
             elif model_name == "deepseek":
                 headers = {"Authorization": f"Bearer {DEEPSEEK_API_KEY}"}
                 payload = {"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}]}
-                r = await client.post("https://api.deepseek.com/chat/completions", headers=headers, json=payload)
+                r = await client.post("https://api.deepseek.com/chat/completions", headers=headers, json极payload)
                 if r.status_code != 200: return f"Error HTTP {r.status_code}: {r.text}"
                 return r.json()["choices"][0]["message"]["content"]
             elif model_name == "claude":
@@ -164,7 +169,7 @@ async def generate_initial_stream(request: GenerateRequest):
         merged_agen = stream_merger(*[stream_wrapper(name, agen) for name, agen in tasks.items()])
         async for name, item in merged_agen:
              yield f"data: {json.dumps(item)}\n\n"
-        yield f"data: {json.dumps({'model': 'system', 'chunk': 'DONE'})}\n\n"
+        yield极 f"data: {json.dumps({'model': 'system', 'chunk': '极DONE'})}\n\n"
 
     async def stream_merger(*agens):
         tasks = {asyncio.create_task(agen.__anext__()): agen for agen in agens}
@@ -179,6 +184,17 @@ async def generate_initial_stream(request: GenerateRequest):
 
     return StreamingResponse(event_stream(), media_type='text/event-stream')
 
+# Nuevo endpoint para generar una respuesta inicial de un modelo específico
+@app.post('/api/generate-initial')
+async def generate_initial_response(request: GenerateInitialRequest):
+    if not request.prompt:
+        raise HTTPException(status_code=400, detail="No prompt provided")
+    
+    contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'direct')
+    
+    response = await call_ai_model_no_stream(request.model, contextual_prompt)
+    return {"response": response}
+
 
 @app.post('/api/refine')
 async def refine_and_synthesize(request: RefineRequest):
@@ -189,7 +205,6 @@ async def refine_and_synthesize(request: RefineRequest):
     highlighted_response = next((v['content'] for k, v in request.initial_responses.items() if request.decisions.get(k) == 'highlight'), None)
     
     synthesis_prompt_parts = [f"**Consulta Original (con su historial):**\n\"{contextual_prompt}\""]
-    # (El resto de la lógica de refinamiento permanece igual)
     if request.synthesis_type == 'summary':
         synthesis_prompt_parts.append("\n**Instrucciones:** Crea un resumen ejecutivo, conciso y directo.")
     else:
@@ -208,22 +223,5 @@ async def debate_and_synthesize(request: DebateRequest):
     # CORRECCIÓN: Se construye el prompt con el historial
     contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'direct')
     
-    # (El resto de la lógica de debate permanece igual)
-    initial_tasks = [call_ai_model_no_stream(model, contextual_prompt) for model in ['gemini', 'deepseek', 'claude']]
-    initial_results = await asyncio.gather(*initial_tasks)
-    initial_responses = {'gemini': initial_results[0], 'deepseek': initial_results[1], 'claude': initial_results[2]}
-
-    critique_prompts = {}
-    for model in initial_responses:
-        context = "\n\n".join([f"**Respuesta de {m.title()}:**\n{r}" for m, r in initial_responses.items() if m != model])
-        critique_prompts[model] = f"**Tu Respuesta Inicial:**\n{initial_responses[model]}\n\n**Respuestas de Colegas:**\n{context}\n\n**Tu Tarea:** Critica sus respuestas y refina tu argumento."
-    
-    critique_tasks = [call_ai_model_no_stream(model, prompt) for model, prompt in critique_prompts.items()]
-    revised_results = await asyncio.gather(*critique_tasks)
-    revised_responses = {'gemini': revised_results[0], 'deepseek': revised_results[1], 'claude': revised_results[2]}
-    
-    synthesis_context = "\n\n".join([f"**Argumento Revisado de {m.title()}:**\n{r}" for m, r in revised_responses.items()])
-    synthesis_prompt = f"**Consulta (con historial):**\n{contextual_prompt}\n\n**Debate de Expertos:**\n{synthesis_context}\n\n**Tu Tarea:** Modera y crea un informe final unificado."
-    final_synthesis = await call_ai_model_no_stream('gemini', synthesis_prompt)
-
-    return {"revised": revised_responses, "synthesis": final_synthesis}
+    # Si se proporcionaron respuestas iniciales, usarlas. De lo contrario, generarlas.
+    if request.initial
