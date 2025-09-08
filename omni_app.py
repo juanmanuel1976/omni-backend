@@ -1,5 +1,5 @@
 # ==============================================================================
-# OMNIQUERY - SERVIDOR DE PROTOTIPO FUNCIONAL v5.3
+# OMNIQUERY - SERVIDOR DE PROTOTIPO FUNCIONAL v5.4 (Corregido y Optimizado)
 # Versión final con memoria conversacional y corrección del historial.
 # ==============================================================================
 import asyncio
@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from anthropic import AsyncAnthropic
+from anthropic import AsyncAnthropic, AnthropicError
 
 # --- CONFIGURACIÓN DE CLAVES DE API (DESDE EL ENTORNO) ---
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
@@ -48,45 +48,68 @@ class RefineRequest(BaseModel):
 class DebateRequest(BaseModel):
     prompt: str
     history: list = []
-    # Agregamos campo opcional para recibir las respuestas iniciales desde el frontend
-    initial_responses: dict = None
+    initial_responses: dict | None = None
 
 # --- LÓGICA DE PROMPTS ---
-def build_contextual_prompt(user_prompt, history, mode):
-    # Construye el historial para dar contexto a la IA
+def build_contextual_prompt(user_prompt: str, history: list, mode: str) -> str:
+    """Construye un prompt con contexto a partir del historial de conversación."""
     history_context = ""
     if history:
         history_context += "**Historial de la Conversación Anterior (para dar contexto):**\n"
         for turn in history:
-            history_context += f"- **Tu Consulta Anterior:** {turn.get('prompt', 'N/A')}\n"
-            history_context += f"- **Nuestra Síntesis Anterior:** {turn.get('synthesis', 'N/A')}\n---\n"
+            # Asegura que las claves existen para evitar errores
+            prompt_anterior = turn.get('prompt', 'N/A')
+            synthesis_anterior = turn.get('synthesis', 'N/A')
+            history_context += f"- **Tu Consulta Anterior:** {prompt_anterior}\n"
+            history_context += f"- **Nuestra Síntesis Anterior:** {synthesis_anterior}\n---\n"
 
     base_prompt = ""
     if mode == 'perspectives':
         base_prompt = f"""
 **Instrucciones Clave:**
 1.  **Idioma Obligatorio:** Responde siempre y únicamente en español.
-2.  **Enfoque Estratégico:** No des una respuesta directa. Tu objetivo es explorar el tema desde un ángulo único o estratégico.
+2.  **Enfoque Estratégico:** No des una respuesta directa. Tu objetivo es explorar el tema desde un ángulo único, estratégico o contraintuitivo.
 **Consulta Actual del Usuario:**
 "{user_prompt}"
 """
-    else: # direct
+    else:  # 'direct'
         base_prompt = f"""
 **Instrucciones Clave:**
 1.  **Idioma Obligatorio:** Responde siempre y únicamente en español.
-2.  **Estilo Conciso:** Sé muy breve y directo.
+2.  **Estilo Conciso:** Sé muy breve, claro y directo en tu respuesta.
 **Consulta Actual del Usuario:**
 "{user_prompt}"
 """
     
-    if history_context:
-        return f"{history_context}\n{base_prompt}"
-    return base_prompt
+    return f"{history_context}\n{base_prompt}" if history_context else base_prompt
 
-# --- FUNCIONES DE STREAMING ---
-async def stream_gemini(prompt):
-    if not GOOGLE_API_KEY: 
-        yield {"model": "gemini", "chunk": "Error: GOOGLE_API_KEY no configurada."}
+# --- FUNCIONES AUXILIARES DE STREAMING ---
+async def stream_wrapper(name, agen):
+    """Envuelve un generador asíncrono para incluir el nombre del modelo en cada item."""
+    async for item in agen:
+        yield name, item
+
+async def stream_merger(*agens):
+    """Combina múltiples generadores asíncronos, produciendo items tan pronto como estén disponibles."""
+    tasks = {asyncio.create_task(agen.__anext__()): agen for agen in agens}
+    while tasks:
+        done, pending = await asyncio.wait(tasks.keys(), return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            agen = tasks.pop(task)
+            try:
+                yield task.result()
+                tasks[asyncio.create_task(agen.__anext__())] = agen
+            except StopAsyncIteration:
+                pass
+            except Exception as e:
+                # Si un stream falla, podemos decidir cómo manejarlo (ej. loggear, ignorar)
+                print(f"Error en un stream: {e}")
+                pass
+
+# --- FUNCIONES DE STREAMING A LAS APIS ---
+async def stream_gemini(prompt: str):
+    if not GOOGLE_API_KEY:
+        yield {"model": "gemini", "chunk": "Error: La GOOGLE_API_KEY no está configurada en el entorno."}
         return
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
@@ -95,204 +118,227 @@ async def stream_gemini(prompt):
             async with client.stream("POST", url, json=payload) as response:
                 if response.status_code != 200:
                     error_text = await response.aread()
-                    yield {"model": "gemini", "chunk": f"Error: {error_text.decode()}"}
+                    yield {"model": "gemini", "chunk": f"Error HTTP {response.status_code}: {error_text.decode()}"}
                     return
                 async for line in response.aiter_lines():
                     if '"text": "' in line:
                         try:
                             text_content = line.split('"text": "')[1].rsplit('"', 1)[0]
                             yield {"model": "gemini", "chunk": text_content.replace('\\n', '\n').replace('\\"', '"')}
-                        except IndexError: 
+                        except (IndexError, json.JSONDecodeError):
                             continue
-    except Exception as e: 
-        yield {"model": "gemini", "chunk": f"Error: {e}"}
+    except httpx.RequestError as e:
+        yield {"model": "gemini", "chunk": f"Error de conexión: {e}"}
+    except Exception as e:
+        yield {"model": "gemini", "chunk": f"Error inesperado en Gemini: {e}"}
 
-async def stream_deepseek(prompt):
-    if not DEEPSEEK_API_KEY: 
-        yield {"model": "deepseek", "chunk": "Error: DEEPSEEK_API_KEY no configurada."}
+async def stream_deepseek(prompt: str):
+    if not DEEPSEEK_API_KEY:
+        yield {"model": "deepseek", "chunk": "Error: La DEEPSEEK_API_KEY no está configurada en el entorno."}
         return
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
-            headers = {"Authorization": f"Bearer {DEEPSEEK_API_KEY}"}
+            headers = {"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"}
             payload = {"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "stream": True}
-            async with client.stream("POST", "https://api.deepseek.com/chat/completions", headers=headers, json=payload)极 response:
+            async with client.stream("POST", "https://api.deepseek.com/chat/completions", headers=headers, json=payload) as response:
                 if response.status_code != 200:
                     error_text = await response.aread()
-                    yield {"model": "deepseek", "chunk": f"Error: {error_text.decode()}"}
+                    yield {"model": "deepseek", "chunk": f"Error HTTP {response.status_code}: {error_text.decode()}"}
                     return
                 async for line in response.aiter_lines():
                     if line.startswith('data: '):
                         data_str = line[6:]
-                        if data_str.strip() == '[极DONE]': 
+                        if data_str.strip() == '[DONE]':
                             break
                         try:
                             data = json.loads(data_str)
-                            if data.get('choices', [{}])[0].get('delta', {}).get('content'):
-                                yield {"model": "deepseek", "chunk": data['choices'][0]['delta']['content']}
-                        except json.JSONDecodeError: 
+                            content = data.get('choices', [{}])[0].get('delta', {}).get('content')
+                            if content:
+                                yield {"model": "deepseek", "chunk": content}
+                        except (json.JSONDecodeError, IndexError):
                             continue
-    except Exception as e: 
-        yield {"model": "deepseek", "chunk": f"Error: {e}"}
+    except httpx.RequestError as e:
+        yield {"model": "deepseek", "chunk": f"Error de conexión: {e}"}
+    except Exception as e:
+        yield {"model": "deepseek", "chunk": f"Error inesperado en DeepSeek: {e}"}
 
-async def stream_claude(prompt):
-    if not ANTHROPIC_API_KEY: 
-        yield {"model": "claude", "chunk": "Error: ANTHROPIC_API_KEY no configurada."}
+async def stream_claude(prompt: str):
+    if not ANTHROPIC_API_KEY:
+        yield {"model": "claude", "chunk": "Error: La ANTHROPIC_API_KEY no está configurada en el entorno."}
         return
     try:
         client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY, timeout=120.0)
-        async with client.messages.stream(model="claude-3-haiku-20240307", max_tokens=4096, messages=[{"role": "user", "content": prompt}]) as stream:
+        async with client.messages.stream(
+            model="claude-3-haiku-20240307",
+            max_tokens=4096,
+            messages=[{"role": "user", "content": prompt}]
+        ) as stream:
             async for text in stream.text_stream:
                 yield {"model": "claude", "chunk": text}
-    except Exception as e: 
-        yield {"model": "claude", "chunk": f"Error: {e}"}
+    except AnthropicError as e:
+        yield {"model": "claude", "chunk": f"Error de API de Anthropic: {e}"}
+    except Exception as e:
+        yield {"model": "claude", "chunk": f"Error inesperado en Claude: {e}"}
 
-
-# --- FUNCIONES SIN STREAMING (PARA DEBATE Y SÍNTESIS) ---
-async def call_ai_model_no_stream(model_name: str, prompt: str):
+# --- FUNCIÓN SIN STREAMING (PARA DEBATE Y SÍNTESIS) ---
+async def call_ai_model_no_stream(model_name: str, prompt: str) -> str:
+    """Realiza una llamada a un modelo de IA y devuelve la respuesta completa."""
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
             if model_name == "gemini":
+                if not GOOGLE_API_KEY: return "Error: GOOGLE_API_KEY no configurada."
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GOOGLE_API_KEY}"
-                payload = {"contents": [{"parts极[{"text": prompt}]}]}
+                payload = {"contents": [{"parts": [{"text": prompt}]}]}
                 r = await client.post(url, json=payload)
-                if r.status_code != 200: 
-                    return f"Error HTTP {r.status_code}: {r.text}"
+                r.raise_for_status()
                 return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+            
             elif model_name == "deepseek":
-                headers = {"Authorization": f"Bearer {DEEPSEEK_API_KEY}"}
+                if not DEEPSEEK_API_KEY: return "Error: DEEPSEEK_API_KEY no configurada."
+                headers = {"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"}
                 payload = {"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}]}
                 r = await client.post("https://api.deepseek.com/chat/completions", headers=headers, json=payload)
-                if r.status_code != 200: 
-                    return f"Error HTTP {r.status_code}: {极r.text}"
+                r.raise_for_status()
                 return r.json()["choices"][0]["message"]["content"]
+
             elif model_name == "claude":
+                if not ANTHROPIC_API_KEY: return "Error: ANTHROPIC_API_KEY no configurada."
                 client_anthropic = AsyncAnthropic(api_key=ANTHROPIC_API_KEY, timeout=120.0)
-                msg = await client_anthropic.messages.create(model="claude-3-haiku-20240307", max_tokens=4096, messages=[{"role": "user", "content": prompt}])
+                msg = await client_anthropic.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=4096,
+                    messages=[{"role": "user", "content": prompt}]
+                )
                 return msg.content[0].text
-    except Exception as e: 
-        return f"Error: {e}"
+            else:
+                return f"Error: Modelo '{model_name}' no reconocido."
+                
+    except httpx.HTTPStatusError as e:
+        return f"Error HTTP {e.response.status_code} para {model_name}: {e.response.text}"
+    except Exception as e:
+        return f"Error inesperado llamando a {model_name}: {e}"
 
 # --- RUTAS DE LA APLICACIÓN ---
 @app.post('/api/generate')
 async def generate_initial_stream(request: GenerateRequest):
     if not request.prompt:
-        raise HTTPException(status_code=400, detail="No prompt provided")
+        raise HTTPException(status_code=400, detail="El campo 'prompt' no puede estar vacío.")
     
-    # CORRECCIÓN: Se construye el prompt con el historial
     contextual_prompt = build_contextual_prompt(request.prompt, request.history, request.mode)
     
     async def event_stream():
-        tasks = { 
-            "gemini": stream_gemini(contextual_prompt), 
-            "deepseek": stream_deepseek(contextual_prompt), 
-            "claude": stream_claude(contextual_prompt) 
+        tasks = {
+            "gemini": stream_gemini(contextual_prompt),
+            "deepseek": stream_deepseek(contextual_prompt),
+            "claude": stream_claude(contextual_prompt)
         }
-        async def stream_wrapper(name, agen):
-            async for item in agen: 
-                yield name, item
+        # La función stream_merger ahora está definida globalmente
         merged_agen = stream_merger(*[stream_wrapper(name, agen) for name, agen in tasks.items()])
+        
         async for name, item in merged_agen:
-             yield f"data: {json.dumps(item)}\n\n"
+            yield f"data: {json.dumps(item)}\n\n"
+        
         yield f"data: {json.dumps({'model': 'system', 'chunk': 'DONE'})}\n\n"
-
-    async def stream_merger(*agens):
-        tasks = {asyncio.create_task(agen.__anext__()): agen for agen in agens}
-        while tasks:
-            done, pending = await asyncio.wait(tasks.keys(), return_when=asyncio.FIRST_COMPLETED)
-            for task in done:
-                agen = tasks.pop(task)
-                try:
-                    yield task.result()
-                    tasks[asyncio.create_task(agen.__anext__())] = agen
-                except StopAsyncIteration: 
-                    pass
 
     return StreamingResponse(event_stream(), media_type='text/event-stream')
 
-# Nuevo endpoint para generar una respuesta inicial de un modelo específico
 @app.post('/api/generate-initial')
 async def generate_initial_response(request: GenerateInitialRequest):
     if not request.prompt:
-        raise HTTPException(status_code=400, detail="No prompt provided")
+        raise HTTPException(status_code=400, detail="El campo 'prompt' no puede estar vacío.")
     
     contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'direct')
     
     response = await call_ai_model_no_stream(request.model, contextual_prompt)
     return {"response": response}
 
-
 @app.post('/api/refine')
 async def refine_and_synthesize(request: RefineRequest):
-    # CORRECCIÓN: Se construye el prompt con el historial
     contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'direct')
     
-    active_responses = {k: v['content'] for k, v in request.initial_responses.items() if request.decisions.get(k) != 'discard'}
-    highlighted_response = next((v['content'] for k, v in request.initial_responses.items() if request.decisions.get(k) == 'highlight'), None)
+    active_responses = {
+        k: v['content'] for k, v in request.initial_responses.items() if request.decisions.get(k) != 'discard'
+    }
+    highlighted_response = next(
+        (v['content'] for k, v in request.initial_responses.items() if request.decisions.get(k) == 'highlight'), None
+    )
     
     synthesis_prompt_parts = [f"**Consulta Original (con su historial):**\n\"{contextual_prompt}\""]
+    
     if request.synthesis_type == 'summary':
-        synthesis_prompt_parts.append("\n**Instrucciones:** Crea un resumen ejecutivo, conciso y directo.")
-    else:
-        synthesis_prompt_parts.append("\n**Instrucciones:** Elabora un informe detallado y bien estructurado.")
+        synthesis_prompt_parts.append("\n**Instrucciones:** Analiza las siguientes respuestas y crea un resumen ejecutivo que sea conciso, directo y capture los puntos clave de todas las perspectivas consideradas.")
+    else: # 'report'
+        synthesis_prompt_parts.append("\n**Instrucciones:** Analiza las siguientes respuestas y elabora un informe detallado y bien estructurado. Integra las diferentes perspectivas en un análisis coherente y completo.")
+    
     if highlighted_response:
-        synthesis_prompt_parts.append("\n**PERSPECTIVA DESTACADA (Priorizar):**\n" + highlighted_response)
-    synthesis_prompt_parts.append("\n极**RESPUESTAS A CONSIDERAR:**")
+        synthesis_prompt_parts.append(f"\n**PERSPECTIVA DESTACADA (Dale prioridad y énfasis a esta visión en tu análisis):**\n{highlighted_response}")
+    
+    synthesis_prompt_parts.append("\n**RESPUESTAS A CONSIDERAR PARA LA SÍNTESIS:**")
     for model, content in active_responses.items():
         synthesis_prompt_parts.append(f"**Respuesta de {model.title()}:**\n{content}\n")
+        
     final_prompt = "\n".join(synthesis_prompt_parts)
     synthesis_text = await call_ai_model_no_stream('gemini', final_prompt)
     return {"synthesis": synthesis_text}
 
 @app.post('/api/debate')
 async def debate_and_synthesize(request: DebateRequest):
-    # CORRECCIÓN: Se construye el prompt con el historial
     contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'direct')
     
-    # Si se proporcionaron respuestas iniciales, usarlas. De lo contrario, generarlas.
-    if request.initial_responses is not None:
-        initial_responses = request.initial_responses
+    # Si no se proporcionan respuestas iniciales, generarlas en paralelo.
+    if request.initial_responses:
+        initial_responses = {k: v['content'] for k, v in request.initial_responses.items()}
     else:
-        # Obtener respuestas iniciales de cada modelo
-        initial_tasks = [
-            call_ai_model_no_stream('gemini', contextual_prompt),
-            call_ai_model_no_stream('deepseek', contextual_prompt),
-            call_ai_model_no_stream('claude', contextual_prompt)
-        ]
+        models = ['gemini', 'deepseek', 'claude']
+        initial_tasks = [call_ai_model_no_stream(model, contextual_prompt) for model in models]
         initial_results = await asyncio.gather(*initial_tasks)
-        initial_responses = {
-            'gemini': initial_results[0],
-            'deepseek': initial_results[1],
-            'claude': initial_results[2]
-        }
+        initial_responses = dict(zip(models, initial_results))
     
     # Fase de crítica y refinamiento
-    critique_prompts = {}
-    for model in initial_responses:
-        context = "\n\n".join([f"**Respuesta de {m.title()}:**\n{r}" for m, r in initial_responses.items() if m != model])
-        critique_prompts[model] = f"**Tu Respuesta Inicial:**\n{initial_responses[model]}\n\n**Respuestas de Colegas:**\n{context}\n\n**Tu Tarea:** Critica sus respuestas y refina tu argumento."
-    
-    critique_tasks = [call_ai_model_no_stream(model, prompt) for model, prompt in critique_prompts.items()]
+    models_to_debate = list(initial_responses.keys())
+    critique_tasks = []
+    for model_to_critique in models_to_debate:
+        other_responses = "\n\n".join(
+            [f"**Respuesta de {m.title()}:**\n{r}" for m, r in initial_responses.items() if m != model_to_critique]
+        )
+        critique_prompt = (
+            f"**Tu Respuesta Inicial:**\n{initial_responses[model_to_critique]}\n\n"
+            f"**Respuestas de tus Colegas:**\n{other_responses}\n\n"
+            "**Tu Tarea:** Actúa como un experto en el tema. Evalúa críticamente las respuestas de tus colegas. "
+            "Identifica fortalezas, debilidades y puntos ciegos tanto en sus argumentos como en el tuyo. "
+            "Luego, refina y fortalece tu argumento original basándote en este análisis comparativo. Tu nueva respuesta debe ser más robusta y completa."
+        )
+        critique_tasks.append(call_ai_model_no_stream(model_to_critique, critique_prompt))
+
+    # **CORRECCIÓN LÓGICA:** Se asegura el orden de las respuestas
     revised_results = await asyncio.gather(*critique_tasks)
-    revised_responses = {
-        'gemini': revised_results[0],
-        'deepseek': revised_results[1],
-        'claude': revised_results[2]
-    }
+    revised_responses = dict(zip(models_to_debate, revised_results))
     
-    synthesis_context = "\n\n".join([f"**Argumento Revisado de {m.title()}:**\n{r}" for m, r in revised_responses.items()])
-    synthesis_prompt = f"**Consulta (con historial):**\n{contextual_prompt}\n\n**Debate de Expertos:**\n{synthesis_context}\n\n**Tu Tarea:** Modera y crea un informe final unificado."
+    # Fase de síntesis final
+    synthesis_context = "\n\n".join(
+        [f"**Argumento Revisado de {m.title()}:**\n{r}" for m, r in revised_responses.items()]
+    )
+    synthesis_prompt = (
+        f"**Consulta Original (incluyendo historial):**\n{contextual_prompt}\n\n"
+        f"**Debate de Expertos (Argumentos Revisados):**\n{synthesis_context}\n\n"
+        "**Tu Tarea:** Actúa como un moderador experto y editor principal. Has recibido los argumentos finales de tres consultores de IA después de un debate. "
+        "Tu objetivo es sintetizar estas perspectivas en un informe final unificado, coherente y de alto valor. "
+        "Identifica el consenso, resuelve las contradicciones y presenta una conclusión clara y accionable. El resultado debe ser más que la suma de sus partes."
+    )
     final_synthesis = await call_ai_model_no_stream('gemini', synthesis_prompt)
 
     return {
-        "revised": revised_responses, 
+        "revised": revised_responses,
         "synthesis": final_synthesis
     }
 
-# Para evitar que el servidor se cierre por inactividad, podemos agregar un endpoint de salud
 @app.get("/health")
 async def health_check():
+    """Endpoint de salud para verificar que el servidor está activo."""
     return {"status": "healthy"}
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Se recomienda obtener el puerto del entorno para mayor flexibilidad en producción
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
