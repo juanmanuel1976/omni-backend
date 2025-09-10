@@ -1,5 +1,5 @@
 # ==============================================================================
-# OMNIQUERY - SERVIDOR FUNCIONAL v6.0 (Con Mejoras Dialécticas)
+# OMNIQUERY - SERVIDOR FUNCIONAL v6.0 (Con Mejoras Dialécticas Corregidas)
 # ==============================================================================
 import asyncio
 import httpx
@@ -281,12 +281,25 @@ async def debate_and_synthesize(request: DebateRequest):
     critique_prompts = {}
     models_order = ['gemini', 'deepseek', 'claude']
     
+    # CAMBIO CRÍTICO: Detectar si es la primera iteración del debate
+    is_first_iteration = len(request.history) <= 1 or not any('Refinamiento dirigido' in turn.get('prompt', '') for turn in request.history)
+    
     for model in models_order:
         context = "\n\n".join([f"**Respuesta de {m.title()}:**\n{r}" for m, r in initial_responses.items() if m != model])
         
-        # MEJORA: Incluir contexto de refinamiento en las críticas
-        base_critique = f"**Tu Respuesta Inicial:**\n{initial_responses[model]}\n\n**Respuestas de Colegas:**\n{context}\n\n**Tu Tarea:** Critica sus respuestas y refina tu argumento."
+        # CAMBIO CRÍTICO: Diferentes prompts según la iteración
+        if is_first_iteration:
+            # Primera iteración: Debate rico y crítica robusta
+            base_critique = f"""**Tu Respuesta Inicial:**\n{initial_responses[model]}\n\n**Respuestas de Colegas:**\n{context}
+
+**Tu Tarea:** Analiza críticamente las respuestas de tus colegas. Identifica fortalezas, debilidades y puntos ciegos en sus enfoques. Refina y mejora tu argumento incorporando nuevas perspectivas que enriquezcan el análisis."""
+        else:
+            # Segunda iteración en adelante: Convergencia dirigida
+            base_critique = f"""**Tu Respuesta Inicial:**\n{initial_responses[model]}\n\n**Respuestas de Colegas:**\n{context}
+
+**Tu Tarea:** Identifica elementos valiosos de sus respuestas que puedas integrar. Reformula tu análisis manteniendo consensos y abordando solo UNA diferencia crítica que consideres fundamental."""
         
+        # Incluir contexto de refinamiento si existe
         if request.dissidenceContext and request.dissidenceContext.get('userRefinementPrompt'):
             user_guidance = request.dissidenceContext['userRefinementPrompt']
             base_critique += f"\n\n**Orientación Específica del Usuario:** {user_guidance}"
@@ -306,6 +319,10 @@ async def debate_and_synthesize(request: DebateRequest):
         confidence_level = request.dissidenceContext.get('confidenceLevel', 'balanced')
         target_consensus = request.dissidenceContext.get('targetConsensus', 70)
         synthesis_prompt += f"\n\n**Objetivo:** Crear una síntesis con nivel de confianza {confidence_level} (>{target_consensus}% consenso entre perspectivas)."
+    
+    # Manejar síntesis forzada
+    if request.dissidenceContext and request.dissidenceContext.get('forcedSynthesis'):
+        synthesis_prompt += "\n\n**INSTRUCCIÓN ESPECIAL:** Este es una síntesis forzada. Enfócate en los consensos existentes y presenta las diferencias restantes como perspectivas complementarias valiosas, no como conflictos a resolver."
     
     final_synthesis = await call_ai_model_no_stream('gemini', synthesis_prompt)
 
