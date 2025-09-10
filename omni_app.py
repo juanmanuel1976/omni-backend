@@ -309,115 +309,6 @@ async def semantic_consensus_endpoint(request: SemanticConsensusRequest):
             "divergence_areas": ["Error del servidor"],
             "explanation": f"Error: {str(e)}"
         }
-
-# ==============================================================================
-# MODIFICACIONES PARA dialectic-enhancements.js
-# ==============================================================================
-
-# REEMPLAZAR la función calculateAndDisplayConsensusEnhanced completa por esta versión:
-
-async function calculateAndDisplayConsensusEnhanced() {
-    try {
-        // Preparar respuestas para análisis semántico
-        const responsesForAnalysis = {};
-        Object.keys(state.initial_responses).forEach(model => {
-            responsesForAnalysis[model] = state.initial_responses[model].content || '';
-        });
-        
-        // Verificar que tenemos respuestas válidas
-        const hasValidResponses = Object.values(responsesForAnalysis).some(content => 
-            content && content.trim().length > 50
-        );
-        
-        if (!hasValidResponses) {
-            // Fallback si no hay respuestas suficientes
-            return calculateTraditionalConsensus();
-        }
-        
-        // Llamar al backend para análisis semántico con Claude
-        const response = await fetch(`${window.API_BASE_URL}/api/semantic-consensus`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                responses: responsesForAnalysis
-            })
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-        
-        const semanticResult = await response.json();
-        const score = semanticResult.consensus_score || 0;
-        
-        // Actualizar UI con análisis semántico detallado
-        updateSemanticConsensusDisplay(score, semanticResult);
-        
-        // Ejecutar lógica de bajo consenso si es necesario
-        const selectedMode = document.querySelector('input[name="analysisMode"]:checked')?.value;
-        if (selectedMode === 'debate' && window.dialecticEnhancements) {
-            window.dialecticEnhancements.handleAdvancedLowConsensus(state.initial_responses, score);
-        } else if (score < 40) {
-            handleLowConsensus();
-        }
-        
-        return score;
-        
-    } catch (error) {
-        console.error('Error en análisis semántico:', error);
-        // Fallback al método tradicional
-        return calculateTraditionalConsensus();
-    }
-}
-
-function updateSemanticConsensusDisplay(score, analysis) {
-    const consensusContainer = document.getElementById('consensus-container');
-    const consensusScore = document.getElementById('consensus-score');
-    const consensusBar = document.getElementById('consensus-bar');
-    const consensusStatus = document.getElementById('consensus-status');
-    
-    if (consensusContainer) consensusContainer.classList.remove('hidden');
-    if (consensusScore) consensusScore.textContent = `${score}%`;
-    if (consensusBar) {
-        setTimeout(() => { consensusBar.style.width = `${score}%`; }, 100);
-    }
-    
-    // Mostrar análisis detallado
-    if (consensusStatus && analysis) {
-        const strongCount = analysis.strong_consensus ? analysis.strong_consensus.length : 0;
-        const moderateCount = analysis.moderate_consensus ? analysis.moderate_consensus.length : 0;
-        
-        consensusStatus.innerHTML = `
-            <div class="text-sm text-gray-300 mt-2">
-                <div class="mb-1">Análisis semántico: ${strongCount} consensos fuertes, ${moderateCount} moderados</div>
-                ${analysis.explanation ? `<div class="text-xs text-gray-400 mb-2">${analysis.explanation}</div>` : ''}
-                <details class="cursor-pointer">
-                    <summary class="text-violet-400 hover:text-violet-300">Ver desglose detallado</summary>
-                    <div class="mt-2 text-xs space-y-1 bg-gray-900/50 p-2 rounded">
-                        ${strongCount > 0 ? `<div><strong class="text-green-400">Consenso fuerte:</strong> ${analysis.strong_consensus.join(', ')}</div>` : ''}
-                        ${moderateCount > 0 ? `<div><strong class="text-yellow-400">Consenso moderado:</strong> ${analysis.moderate_consensus.join(', ')}</div>` : ''}
-                        ${analysis.divergence_areas && analysis.divergence_areas.length > 0 ? `<div><strong class="text-red-400">Divergencias:</strong> ${analysis.divergence_areas.join(', ')}</div>` : ''}
-                    </div>
-                </details>
-            </div>
-        `;
-    }
-}
-
-function calculateTraditionalConsensus() {
-    // Función de fallback (mantener la existente)
-    const keywordsGemini = getKeywords(state.initial_responses.gemini.content);
-    const keywordsDeepseek = getKeywords(state.initial_responses.deepseek.content);
-    const keywordsClaude = getKeywords(state.initial_responses.claude.content);
-    
-    const allSets = [keywordsGemini, keywordsDeepseek, keywordsClaude].filter(s => s.size > 0);
-    if (allSets.length < 2) return 0;
-    
-    const intersection = new Set([...allSets[0]].filter(word => allSets.every(set => set.has(word))));
-    const union = new Set([...keywordsGemini, ...keywordsDeepseek, ...keywordsClaude]);
-    
-    return union.size === 0 ? 0 : Math.round((intersection.size / union.size) * 100);
-}
 # --- RUTAS DE LA APLICACIÓN ---
 @app.post('/api/generate')
 async def generate_initial_stream(request: GenerateRequest):
@@ -566,4 +457,5 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
