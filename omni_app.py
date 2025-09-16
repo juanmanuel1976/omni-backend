@@ -452,10 +452,37 @@ async def health_check():
         "version": "6.0",
         "features": ["dialectic_enhancements", "extended_timeout", "dissidence_analysis"]
     }
+# =======================================================
+# === PEGA EL NUEVO CÓDIGO DEL PDF AQUÍ ===
+# =======================================================
+from weasyprint import HTML
+from fastapi import Request
+from fastapi.responses import Response
 
+class PdfRequest(BaseModel):
+    html_content: str
+
+@app.post('/api/generate-pdf')
+async def generate_pdf_endpoint(request: PdfRequest):
+    """
+    Endpoint que recibe HTML y CSS, y retorna un PDF de alta fidelidad.
+    """
+    try:
+        pdf_bytes = HTML(string=request.html_content).write_pdf()
+        headers = {
+            'Content-Disposition': 'attachment; filename="crisalia_reporte.pdf"'
+        }
+        return Response(content=pdf_bytes, media_type='application/pdf', headers=headers)
+    except Exception as e:
+        print(f"Error al generar PDF: {e}")
+        raise HTTPException(status_code=500, detail="No se pudo generar el PDF.")
+# =======================================================
+# === FIN DEL NUEVO CÓDIGO DEL PDF ===
+# =======================================================
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
