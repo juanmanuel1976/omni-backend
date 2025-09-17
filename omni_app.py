@@ -51,7 +51,7 @@ class DebateRequest(BaseModel):
     initial_responses: Optional[Dict[str, str]] = None
     dissidenceContext: Optional[Dict] = None  # NUEVA FUNCIONALIDAD
     class PromptAnalysisRequest(BaseModel):
-    prompt: str
+        prompt: str
 
 # --- LÓGICA DE PROMPTS ---
 def build_contextual_prompt(user_prompt, history, mode):
@@ -466,3 +466,4 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
