@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Optional, List
-from anthropic import AsyncAnthropic
+from anthropic import AsyncAnthr
 
 # --- CONFIGURACIÓN DE CLAVES DE API (DESDE EL ENTORNO) ---
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
@@ -50,7 +50,8 @@ class DebateRequest(BaseModel):
     history: list = []
     initial_responses: Optional[Dict[str, str]] = None
     dissidenceContext: Optional[Dict] = None  # NUEVA FUNCIONALIDAD
-    class PromptAnalysisRequest(BaseModel):
+    
+class PromptAnalysisRequest(BaseModel):
         prompt: str
 
 # --- LÓGICA DE PROMPTS ---
@@ -466,4 +467,5 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
