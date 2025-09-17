@@ -1,5 +1,5 @@
 # ==============================================================================
-# OMNIQUERY - SERVIDOR FUNCIONAL v6.0 (Con Mejoras Dialécticas Corregidas)
+# OMNIQUERY - SERVIDOR FUNCIONAL v6.0 (Con Mejoras DialÃ©cticas Corregidas)
 # ==============================================================================
 import asyncio
 import httpx
@@ -12,12 +12,12 @@ from pydantic import BaseModel
 from typing import Dict, Optional, List
 from anthropic import AsyncAnthropic
 
-# --- CONFIGURACIÓN DE CLAVES DE API (DESDE EL ENTORNO) ---
+# --- CONFIGURACIÃ“N DE CLAVES DE API (DESDE EL ENTORNO) ---
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
-# --- INICIALIZACIÓN DE LA APLICACIÓN FASTAPI ---
+# --- INICIALIZACIÃ“N DE LA APLICACIÃ“N FASTAPI ---
 app = FastAPI(title="OmniQuery API")
 app.add_middleware(
     CORSMiddleware,
@@ -51,29 +51,29 @@ class DebateRequest(BaseModel):
     initial_responses: Optional[Dict[str, str]] = None
     dissidenceContext: Optional[Dict] = None  # NUEVA FUNCIONALIDAD
 
-# --- LÓGICA DE PROMPTS ---
+# --- LÃ“GICA DE PROMPTS ---
 def build_contextual_prompt(user_prompt, history, mode):
     history_context = ""
     if history:
-        history_context += "**Historial de la Conversación Anterior (para dar contexto):**\n"
+        history_context += "**Historial de la ConversaciÃ³n Anterior (para dar contexto):**\n"
         for turn in history:
             history_context += f"- **Tu Consulta Anterior:** {turn.get('prompt', 'N/A')}\n"
-            history_context += f"- **Nuestra Síntesis Anterior:** {turn.get('synthesis', 'N/A')}\n---\n"
+            history_context += f"- **Nuestra SÃ­ntesis Anterior:** {turn.get('synthesis', 'N/A')}\n---\n"
     
     base_prompt = ""
     if mode == 'perspectives':
         base_prompt = f"""
 **Instrucciones Clave:**
-1.  **Idioma Obligatorio:** Responde siempre y únicamente en español.
-2.  **Enfoque Estratégico:** No des una respuesta directa. Tu objetivo es explorar el tema desde un ángulo único o estratégico.
+1.  **Idioma Obligatorio:** Responde siempre y Ãºnicamente en espaÃ±ol.
+2.  **Enfoque EstratÃ©gico:** No des una respuesta directa. Tu objetivo es explorar el tema desde un Ã¡ngulo Ãºnico o estratÃ©gico.
 **Consulta Actual del Usuario:**
 "{user_prompt}"
 """
     else:  # direct
         base_prompt = f"""
 **Instrucciones Clave:**
-1.  **Idioma Obligatorio:** Responde siempre y únicamente en español.
-2.  **Estilo Conciso:** Sé muy breve y directo.
+1.  **Idioma Obligatorio:** Responde siempre y Ãºnicamente en espaÃ±ol.
+2.  **Estilo Conciso:** SÃ© muy breve y directo.
 **Consulta Actual del Usuario:**
 "{user_prompt}"
 """
@@ -81,7 +81,7 @@ def build_contextual_prompt(user_prompt, history, mode):
     return f"{history_context}\n{base_prompt}" if history_context else base_prompt
 
 def build_enhanced_dialectic_prompt(base_prompt, dissidence_context=None):
-    """Construye un prompt mejorado para el modo dialéctico con contexto de disidencias"""
+    """Construye un prompt mejorado para el modo dialÃ©ctico con contexto de disidencias"""
     enhanced_prompt = base_prompt
     
     if dissidence_context:
@@ -95,7 +95,7 @@ def build_enhanced_dialectic_prompt(base_prompt, dissidence_context=None):
 
 **INSTRUCCIONES DE REFINAMIENTO:**
 - **Nivel de Confianza Objetivo:** {confidence_level.title()} (>{target_consensus}% consenso)
-- **Orientación del Usuario:** {user_refinement}
+- **OrientaciÃ³n del Usuario:** {user_refinement}
 """
         
         if included_dissidences:
@@ -203,15 +203,15 @@ async def call_ai_model_no_stream(model_name: str, prompt: str):
         return f"Error en {model_name}: {e}"
 
 # ==============================================================================
-# MODIFICACIONES PARA omni_app.py - Análisis Semántico con Claude
+# MODIFICACIONES PARA omni_app.py - AnÃ¡lisis SemÃ¡ntico con Claude
 # ==============================================================================
 
-# 1. AGREGAR ESTA FUNCIÓN después de la función call_ai_model_no_stream (línea ~140)
+# 1. AGREGAR ESTA FUNCIÃ“N despuÃ©s de la funciÃ³n call_ai_model_no_stream (lÃ­nea ~140)
 
 async def analyze_semantic_consensus_with_claude(responses):
-    """Usa Claude para analizar consenso semántico entre respuestas"""
+    """Usa Claude para analizar consenso semÃ¡ntico entre respuestas"""
     
-    # Construir prompt para análisis de consenso
+    # Construir prompt para anÃ¡lisis de consenso
     consensus_prompt = f"""Analiza el nivel de consenso conceptual entre estas tres respuestas sobre el mismo tema.
 
 **Respuesta Gemini:**
@@ -225,28 +225,28 @@ async def analyze_semantic_consensus_with_claude(responses):
 
 **Tu tarea como mediador neutral:**
 1. Identifica conceptos centrales comunes (aunque usen palabras diferentes)
-2. Detecta áreas de consenso real vs divergencia superficial  
+2. Detecta Ã¡reas de consenso real vs divergencia superficial  
 3. Calcula un porcentaje de consenso conceptual (0-100%)
-4. Lista los puntos específicos de consenso fuerte
+4. Lista los puntos especÃ­ficos de consenso fuerte
 
-**Criterios de evaluación:**
+**Criterios de evaluaciÃ³n:**
 - Consenso fuerte: Conceptos donde los 3 modelos coinciden sustancialmente
 - Consenso moderado: Conceptos donde 2 modelos coinciden
 - Divergencia: Conceptos donde hay desacuerdo real
 
-**Formato de respuesta (JSON válido):**
+**Formato de respuesta (JSON vÃ¡lido):**
 {{
-    "consensus_score": [número entre 0-100],
+    "consensus_score": [nÃºmero entre 0-100],
     "strong_consensus": ["concepto1", "concepto2"],
     "moderate_consensus": ["concepto3", "concepto4"], 
-    "divergence_areas": ["área1", "área2"],
-    "explanation": "explicación breve de 1-2 líneas"
+    "divergence_areas": ["Ã¡rea1", "Ã¡rea2"],
+    "explanation": "explicaciÃ³n breve de 1-2 lÃ­neas"
 }}
 
-Responde SOLO con el JSON válido, sin texto adicional."""
+Responde SOLO con el JSON vÃ¡lido, sin texto adicional."""
     
     try:
-        # Usar Claude para análisis semántico
+        # Usar Claude para anÃ¡lisis semÃ¡ntico
         consensus_analysis = await call_ai_model_no_stream('claude', consensus_prompt)
         
         # Limpiar respuesta por si tiene texto extra
@@ -260,7 +260,7 @@ Responde SOLO con el JSON válido, sin texto adicional."""
         # Parsear respuesta JSON
         result = json.loads(json_content)
         
-        # Validar que el score esté en rango válido
+        # Validar que el score estÃ© en rango vÃ¡lido
         if 'consensus_score' in result:
             result['consensus_score'] = max(0, min(100, result['consensus_score']))
         
@@ -269,35 +269,35 @@ Responde SOLO con el JSON válido, sin texto adicional."""
     except json.JSONDecodeError as e:
         print(f"Error parsing JSON: {e}")
         print(f"Raw response: {consensus_analysis}")
-        # Fallback con score básico
+        # Fallback con score bÃ¡sico
         return {
             "consensus_score": 50,
             "strong_consensus": [],
             "moderate_consensus": [],
-            "divergence_areas": ["Error en análisis"],
-            "explanation": "Error al procesar análisis semántico"
+            "divergence_areas": ["Error en anÃ¡lisis"],
+            "explanation": "Error al procesar anÃ¡lisis semÃ¡ntico"
         }
     except Exception as e:
-        print(f"Error en análisis semántico: {e}")
-        # Fallback básico
+        print(f"Error en anÃ¡lisis semÃ¡ntico: {e}")
+        # Fallback bÃ¡sico
         return {
             "consensus_score": 30,
             "strong_consensus": [],
             "moderate_consensus": [],
-            "divergence_areas": ["Error de conexión"],
-            "explanation": "Error en análisis semántico"
+            "divergence_areas": ["Error de conexiÃ³n"],
+            "explanation": "Error en anÃ¡lisis semÃ¡ntico"
         }
 
-# 2. AGREGAR NUEVO MODELO para el request (después de DebateRequest, línea ~55)
+# 2. AGREGAR NUEVO MODELO para el request (despuÃ©s de DebateRequest, lÃ­nea ~55)
 
 class SemanticConsensusRequest(BaseModel):
     responses: Dict[str, str]
 
-# 3. AGREGAR NUEVO ENDPOINT (al final de los endpoints, antes de @app.get("/"), línea ~280)
+# 3. AGREGAR NUEVO ENDPOINT (al final de los endpoints, antes de @app.get("/"), lÃ­nea ~280)
 
 @app.post('/api/semantic-consensus')
 async def semantic_consensus_endpoint(request: SemanticConsensusRequest):
-    """Endpoint para análisis semántico de consenso usando Claude como mediador"""
+    """Endpoint para anÃ¡lisis semÃ¡ntico de consenso usando Claude como mediador"""
     try:
         result = await analyze_semantic_consensus_with_claude(request.responses)
         return result
@@ -309,7 +309,7 @@ async def semantic_consensus_endpoint(request: SemanticConsensusRequest):
             "divergence_areas": ["Error del servidor"],
             "explanation": f"Error: {str(e)}"
         }
-# --- RUTAS DE LA APLICACIÓN ---
+# --- RUTAS DE LA APLICACIÃ“N ---
 @app.post('/api/generate')
 async def generate_initial_stream(request: GenerateRequest):
     contextual_prompt = build_contextual_prompt(request.prompt, request.history, request.mode)
@@ -384,32 +384,32 @@ async def debate_and_synthesize(request: DebateRequest):
         results = await asyncio.gather(*initial_tasks)
         initial_responses = {'gemini': results[0], 'deepseek': results[1], 'claude': results[2]}
 
-    # Construir prompts de crítica contextual
+    # Construir prompts de crÃ­tica contextual
     critique_prompts = {}
     models_order = ['gemini', 'deepseek', 'claude']
     
-    # CAMBIO CRÍTICO: Detectar si es la primera iteración del debate
+    # CAMBIO CRÃTICO: Detectar si es la primera iteraciÃ³n del debate
     is_first_iteration = len(request.history) <= 1 or not any('Refinamiento dirigido' in turn.get('prompt', '') for turn in request.history)
     
     for model in models_order:
         context = "\n\n".join([f"**Respuesta de {m.title()}:**\n{r}" for m, r in initial_responses.items() if m != model])
         
-        # CAMBIO CRÍTICO: Diferentes prompts según la iteración
+        # CAMBIO CRÃTICO: Diferentes prompts segÃºn la iteraciÃ³n
         if is_first_iteration:
-            # Primera iteración: Debate rico y crítica robusta
+            # Primera iteraciÃ³n: Debate rico y crÃ­tica robusta
             base_critique = f"""**Tu Respuesta Inicial:**\n{initial_responses[model]}\n\n**Respuestas de Colegas:**\n{context}
 
-**Tu Tarea:** Analiza críticamente las respuestas de tus colegas. Identifica fortalezas, debilidades y puntos ciegos en sus enfoques. Refina y mejora tu argumento incorporando nuevas perspectivas que enriquezcan el análisis."""
+**Tu Tarea:** Analiza crÃ­ticamente las respuestas de tus colegas. Identifica fortalezas, debilidades y puntos ciegos en sus enfoques. Refina y mejora tu argumento incorporando nuevas perspectivas que enriquezcan el anÃ¡lisis."""
         else:
-            # Segunda iteración en adelante: Convergencia dirigida
+            # Segunda iteraciÃ³n en adelante: Convergencia dirigida
             base_critique = f"""**Tu Respuesta Inicial:**\n{initial_responses[model]}\n\n**Respuestas de Colegas:**\n{context}
 
-**Tu Tarea:** Identifica elementos valiosos de sus respuestas que puedas integrar. Reformula tu análisis manteniendo consensos y abordando solo UNA diferencia crítica que consideres fundamental."""
+**Tu Tarea:** Identifica elementos valiosos de sus respuestas que puedas integrar. Reformula tu anÃ¡lisis manteniendo consensos y abordando solo UNA diferencia crÃ­tica que consideres fundamental."""
         
         # Incluir contexto de refinamiento si existe
         if request.dissidenceContext and request.dissidenceContext.get('userRefinementPrompt'):
             user_guidance = request.dissidenceContext['userRefinementPrompt']
-            base_critique += f"\n\n**Orientación Específica del Usuario:** {user_guidance}"
+            base_critique += f"\n\n**OrientaciÃ³n EspecÃ­fica del Usuario:** {user_guidance}"
         
         critique_prompts[model] = base_critique
     
@@ -417,19 +417,19 @@ async def debate_and_synthesize(request: DebateRequest):
     revised_results = await asyncio.gather(*critique_tasks)
     revised_responses = dict(zip(models_order, revised_results))
     
-    # Síntesis final con contexto mejorado
+    # SÃ­ntesis final con contexto mejorado
     synthesis_context = "\n\n".join([f"**Argumento Revisado de {m.title()}:**\n{r}" for m, r in revised_responses.items()])
     synthesis_prompt = f"**Consulta (con historial):**\n{contextual_prompt}\n\n**Debate de Expertos:**\n{synthesis_context}\n\n**Tu Tarea:** Modera y crea un informe final unificado."
     
-    # MEJORA: Añadir objetivos de consenso a la síntesis
+    # MEJORA: AÃ±adir objetivos de consenso a la sÃ­ntesis
     if request.dissidenceContext:
         confidence_level = request.dissidenceContext.get('confidenceLevel', 'balanced')
         target_consensus = request.dissidenceContext.get('targetConsensus', 70)
-        synthesis_prompt += f"\n\n**Objetivo:** Crear una síntesis con nivel de confianza {confidence_level} (>{target_consensus}% consenso entre perspectivas)."
+        synthesis_prompt += f"\n\n**Objetivo:** Crear una sÃ­ntesis con nivel de confianza {confidence_level} (>{target_consensus}% consenso entre perspectivas)."
     
-    # Manejar síntesis forzada
+    # Manejar sÃ­ntesis forzada
     if request.dissidenceContext and request.dissidenceContext.get('forcedSynthesis'):
-        synthesis_prompt += "\n\n**INSTRUCCIÓN ESPECIAL:** Este es una síntesis forzada. Enfócate en los consensos existentes y presenta las diferencias restantes como perspectivas complementarias valiosas, no como conflictos a resolver."
+        synthesis_prompt += "\n\n**INSTRUCCIÃ“N ESPECIAL:** Este es una sÃ­ntesis forzada. EnfÃ³cate en los consensos existentes y presenta las diferencias restantes como perspectivas complementarias valiosas, no como conflictos a resolver."
     
     final_synthesis = await call_ai_model_no_stream('gemini', synthesis_prompt)
 
@@ -442,7 +442,7 @@ async def debate_and_synthesize(request: DebateRequest):
 
 @app.get("/")
 async def root():
-    return {"message": "Crisalia API v6.0 - Con Mejoras Dialécticas"}
+    return {"message": "Crisalia API v6.0 - Con Mejoras DialÃ©cticas"}
 
 @app.get("/health")
 async def health_check():
@@ -452,10 +452,37 @@ async def health_check():
         "version": "6.0",
         "features": ["dialectic_enhancements", "extended_timeout", "dissidence_analysis"]
     }
+# =======================================================
+# === PEGA EL NUEVO CÃ“DIGO DEL PDF AQUÃ ===
+# =======================================================
+from weasyprint import HTML
+from fastapi import Request
+from fastapi.responses import Response
 
+class PdfRequest(BaseModel):
+    html_content: str
+
+@app.post('/api/generate-pdf')
+async def generate_pdf_endpoint(request: PdfRequest):
+    """
+    Endpoint que recibe HTML y CSS, y retorna un PDF de alta fidelidad.
+    """
+    try:
+        pdf_bytes = HTML(string=request.html_content).write_pdf()
+        headers = {
+            'Content-Disposition': 'attachment; filename="crisalia_reporte.pdf"'
+        }
+        return Response(content=pdf_bytes, media_type='application/pdf', headers=headers)
+    except Exception as e:
+        print(f"Error al generar PDF: {e}")
+        raise HTTPException(status_code=500, detail="No se pudo generar el PDF.")
+# =======================================================
+# === FIN DEL NUEVO CÃ“DIGO DEL PDF ===
+# =======================================================
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
