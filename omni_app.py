@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Optional, List
-from anthropic import AsyncAnthr
+from anthropic import AsyncAnthropic
 
 # --- CONFIGURACIÓN DE CLAVES DE API (DESDE EL ENTORNO) ---
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
@@ -50,9 +50,6 @@ class DebateRequest(BaseModel):
     history: list = []
     initial_responses: Optional[Dict[str, str]] = None
     dissidenceContext: Optional[Dict] = None  # NUEVA FUNCIONALIDAD
-    
-class PromptAnalysisRequest(BaseModel):
-        prompt: str
 
 # --- LÓGICA DE PROMPTS ---
 def build_contextual_prompt(user_prompt, history, mode):
@@ -442,14 +439,7 @@ async def debate_and_synthesize(request: DebateRequest):
         "initial": initial_responses,
         "dissidenceContext": request.dissidenceContext  # Retornar contexto para referencia
     }
-@app.post('/api/analyze-prompt')
-async def analyze_prompt_basic(request: PromptAnalysisRequest):
-    """Endpoint básico para análisis de prompts - versión de prueba"""
-    return {
-        "prompt": request.prompt,
-        "score": 75,
-        "status": "analysis_working"
-    }
+
 @app.get("/")
 async def root():
     return {"message": "Crisalia API v6.0 - Con Mejoras Dialécticas"}
