@@ -32,6 +32,7 @@ class GenerateRequest(BaseModel):
     prompt: str
     mode: str
     history: list = []
+    isDocument: bool = False
 
 class GenerateInitialRequest(BaseModel):
     prompt: str
@@ -50,26 +51,41 @@ class DebateRequest(BaseModel):
     history: list = []
     initial_responses: Optional[Dict[str, str]] = None
     dissidenceContext: Optional[Dict] = None  # NUEVA FUNCIONALIDAD
+    isDocument: bool = False
 
 # --- LÓGICA DE PROMPTS ---
-def build_contextual_prompt(user_prompt, history, mode):
+def build_contextual_prompt(user_prompt, history, mode, isDocument=False):
     history_context = ""
     if history:
         history_context += "**Historial de la Conversación Anterior (para dar contexto):**\n"
         for turn in history:
             history_context += f"- **Tu Consulta Anterior:** {turn.get('prompt', 'N/A')}\n"
             history_context += f"- **Nuestra Síntesis Anterior:** {turn.get('synthesis', 'N/A')}\n---\n"
-    
+
+    # LÓGICA CRÍTICA: Diferenciamos si el input es un documento o una consulta general.
+    if isDocument:
+        # Si es un documento, usamos un prompt que lo toma como verdad absoluta.
+        base_prompt = f"""**Instrucciones Clave:**
+1.  **Fuente de Verdad Absoluta:** El usuario ha proporcionado un documento. Su contenido es la única fuente de verdad.
+2.  **Tarea:** Basa tu respuesta exclusivamente en la información contenida en el documento. No añadas conocimiento externo ni verifiques los datos del documento.
+3.  **Idioma:** Responde siempre y únicamente en español.
+**Consulta del Usuario sobre el Documento:**
+"{user_prompt}"
+"""
+        # Devolvemos este prompt especial y terminamos
+        return f"{history_context}\n{base_prompt}" if history_context else base_prompt
+
+    # Si NO es un documento, la función continúa con la lógica de modos corregida.
     base_prompt = ""
-    if mode == 'perspectives':
+    if mode == 'perspectives': # Esto es lo que su UI llama "Análisis Exhaustivo"
         base_prompt = f"""
 **Instrucciones Clave:**
 1.  **Idioma Obligatorio:** Responde siempre y únicamente en español.
-2.  **Enfoque Estratégico:** No des una respuesta directa. Tu objetivo es explorar el tema desde un ángulo único o estratégico.
+2.  **Análisis Estructurado:** Tu tarea principal es ser útil. Si la consulta pide datos concretos, primero establece la base factual de manera clara y precisa. Solo después, si es apropiado, desarrolla un análisis estratégico sobre esa base verificable.
 **Consulta Actual del Usuario:**
 "{user_prompt}"
 """
-    else:  # direct
+    else:  # 'direct' (Análisis Conciso)
         base_prompt = f"""
 **Instrucciones Clave:**
 1.  **Idioma Obligatorio:** Responde siempre y únicamente en español.
@@ -439,7 +455,75 @@ async def debate_and_synthesize(request: DebateRequest):
         "initial": initial_responses,
         "dissidenceContext": request.dissidenceContext  # Retornar contexto para referencia
     }
+# ==============================================================================
+# INICIO DEL MÓDULO DE FACT-CHECKING (PEGAR AL FINAL DE LOS ENDPOINTS)
+# ==============================================================================
+class FactCheckRequest(BaseModel):
+    text_to_check: str
+    original_query: str
 
+async def perform_fact_check(text_to_check: str, original_query: str):
+    """
+    Sistema de 3 pasos para verificar afirmaciones factuales en un texto.
+    """
+    try:
+        # 1. Extraer afirmaciones verificables del texto.
+        extraction_prompt = f"""
+Del siguiente texto, extrae una lista de hasta 5 afirmaciones factuales clave y verificables (nombres, fechas, cifras, cargos). No extraigas opiniones ni análisis.
+
+Texto a analizar:
+"{text_to_check}"
+
+Responde únicamente con un objeto JSON válido con la clave "claims", que contenga una lista de strings.
+Ejemplo de salida: {{"claims": ["Luis Caputo es el Ministro de Economía desde Diciembre 2023.", "Sergio Massa fue candidato a presidente."]}}
+"""
+        raw_claims = await call_ai_model_no_stream('claude', extraction_prompt)
+        claims_data = json.loads(raw_claims[raw_claims.find('{'):raw_claims.rfind('}')+1])
+        claims = claims_data.get("claims", [])
+
+        if not claims:
+            return {"status": "success", "report": "No se detectaron afirmaciones factuales específicas para verificar."}
+
+        # 2. Verificar cada afirmación.
+        verification_tasks = []
+        for claim in claims:
+            verification_prompt = f"""
+Evalúa la siguiente afirmación basada en tu conocimiento general y datos públicos. Responde con un JSON que contenga "status" ('Verificado', 'Incierto', 'Refutado') y una "correction" si es necesario.
+
+Afirmación: "{claim}"
+Contexto de la consulta original: "{original_query}"
+"""
+            verification_tasks.append(call_ai_model_no_stream('gemini', verification_prompt))
+        
+        results = await asyncio.gather(*verification_tasks)
+
+        # 3. Generar un reporte final.
+        report_items = []
+        for i, raw_result in enumerate(results):
+            try:
+                result_json = json.loads(raw_result[raw_result.find('{'):raw_result.rfind('}')+1])
+                report_items.append({
+                    "claim": claims[i],
+                    "status": result_json.get("status", "Error"),
+                    "correction": result_json.get("correction", "-")
+                })
+            except Exception:
+                report_items.append({"claim": claims[i], "status": "Error de Verificación", "correction": "-"})
+
+        return {"status": "success", "report": report_items}
+    except Exception as e:
+        return {"status": "error", "message": f"Fallo el proceso de fact-checking: {str(e)}"}
+
+
+@app.post("/api/fact-check")
+async def fact_check_endpoint(request: FactCheckRequest):
+    """
+    Endpoint para recibir texto y realizar la verificación de hechos.
+    """
+    return await perform_fact_check(request.text_to_check, request.original_query)
+# ==============================================================================
+# FIN DEL MÓDULO DE FACT-CHECKING
+# ==============================================================================
 @app.get("/")
 async def root():
     return {"message": "Crisalia API v6.0 - Con Mejoras Dialécticas"}
