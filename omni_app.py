@@ -387,42 +387,100 @@ async def refine_and_synthesize(request: RefineRequest):
 
 @app.post('/api/debate')
 async def debate_and_synthesize(request: DebateRequest):
-    contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'perspectives', request.isDocument)
+    contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'direct')
     
+    # NUEVA FUNCIONALIDAD: Aplicar contexto de disidencias si existe
     if request.dissidenceContext:
         contextual_prompt = build_enhanced_dialectic_prompt(contextual_prompt, request.dissidenceContext)
     
-    initial_tasks = [call_ai_model_no_stream(m, contextual_prompt) for m in ['gemini', 'deepseek', 'claude']]
-    results = await asyncio.gather(*initial_tasks)
-    initial_responses = {'gemini': results[0], 'deepseek': results[1], 'claude': results[2]}
+    if request.initial_responses:
+        initial_responses = {k: v['content'] for k, v in request.initial_responses.items()}
+    else:
+        initial_tasks = [call_ai_model_no_stream(m, contextual_prompt) for m in ['gemini', 'deepseek', 'claude']]
+        results = await asyncio.gather(*initial_tasks)
+        initial_responses = {'gemini': results[0], 'deepseek': results[1], 'claude': results[2]}
 
+    # Construir prompts de crítica contextual
     critique_prompts = {}
     models_order = ['gemini', 'deepseek', 'claude']
-    is_first_iteration = len(request.history) <= 1
+    
+    # CAMBIO CRÍTICO: Detectar si es la primera iteración del debate
+    is_first_iteration = len(request.history) <= 1 or not any('Refinamiento dirigido' in turn.get('prompt', '') for turn in request.history)
+    
+    ## ================ INICIO DEL BLOQUE A PEGAR ================
 
-    for model in models_order:
-        context = "\n\n".join([f"**Respuesta de {m.title()}:**\n{r}" for m, r in initial_responses.items() if m != model])
-        if is_first_iteration:
-            base_critique = f"""**Tu Respuesta Inicial:**\n{initial_responses[model]}\n\n**Respuestas de tus Colegas:**\n{context}\n\n**Tu Tarea: Revisión Crítica en 2 Pasos**\n\n**PASO 1: Protocolo de Verificación Cruzada (OBLIGATORIO)**\n- Verifica rigurosamente los datos factuales de tus colegas (nombres, equipos, fechas).\n- Si detectas un error factual (ej: un jugador que no pertenece al club mencionado), DEBES señalarlo y corregirlo explícitamente.\n\n**PASO 2: Análisis Estratégico**\n- Una vez verificados los hechos, analiza críticamente los enfoques de tus colegas y refina tu argumento."""
-        else:
-            base_critique = f"""**Tu Respuesta Inicial:**\n{initial_responses[model]}\n\n**Respuestas de tus Colegas:**\n{context}\n\n**Tu Tarea: Convergencia con Verificación**\n- **Verificación Continua:** Si aún observas datos incorrectos, señálalos.\n- **Integración y Síntesis:** Identifica los elementos valiosos y verificados para construir un consenso."""
-        
-        if request.dissidenceContext and request.dissidenceContext.get('userRefinementPrompt'):
-            base_critique += f"\n\n**Orientación del Usuario:** {request.dissidenceContext['userRefinementPrompt']}"
-        
-        critique_prompts[model] = base_critique
+for model in models_order:
+    context = "\n\n".join([f"**Respuesta de {m.title()}:**\n{r}" for m, r in initial_responses.items() if m != model])
+    
+    if is_first_iteration:
+        # Primera iteración: Debate rico con verificación cruzada obligatoria
+        base_critique = f"""**Tu Respuesta Inicial:**
+{initial_responses[model]}
+
+**Respuestas de tus Colegas:**
+{context}
+
+**Tu Tarea: Revisión Crítica en 2 Pasos**
+
+**PASO 1: Protocolo de Verificación Cruzada (OBLIGATORIO)**
+- Antes de analizar, verifica rigurosamente los datos factuales de tus colegas (nombres, equipos, fechas, estadísticas).
+- Si detectas un error factual (ej: un jugador que no pertenece al club mencionado), DEBES señalarlo y corregirlo explícitamente en tu respuesta. La precisión es la máxima prioridad.
+- No integres información de otros si no estás 100% seguro de su veracidad.
+
+**PASO 2: Análisis Estratégico**
+- Una vez verificados los hechos, analiza críticamente los enfoques de tus colegas.
+- Identifica fortalezas, debilidades y puntos ciegos.
+- Refina y mejora tu propio argumento, incorporando solo la información verificada que enriquezca el análisis.
+"""
+    else:
+        # Segunda iteración en adelante: Convergencia con verificación
+        base_critique = f"""**Tu Respuesta Inicial:**
+{initial_responses[model]}
+
+**Respuestas de tus Colegas:**
+{context}
+
+**Tu Tarea: Convergencia con Verificación**
+- **Verificación Continua:** Si todavía observas algún dato factual incorrecto en las respuestas de tus colegas, señálalo.
+- **Integración y Síntesis:** Identifica los elementos valiosos y verificados de las otras respuestas para integrarlos en la tuya.
+- **Objetivo:** Reformula tu análisis para construir un consenso basado únicamente en información precisa.
+"""
+    
+    # Incluir contexto de refinamiento si existe
+    if request.dissidenceContext and request.dissidenceContext.get('userRefinementPrompt'):
+        user_guidance = request.dissidenceContext['userRefinementPrompt']
+        base_critique += f"\n\n**Orientación Específica del Usuario:** {user_guidance}"
+    
+    critique_prompts[model] = base_critique
+
+## ================= FIN DEL BLOQUE A PEGAR =================
     
     critique_tasks = [call_ai_model_no_stream(m, critique_prompts[m]) for m in models_order]
     revised_results = await asyncio.gather(*critique_tasks)
     revised_responses = dict(zip(models_order, revised_results))
     
+    # Síntesis final con contexto mejorado
     synthesis_context = "\n\n".join([f"**Argumento Revisado de {m.title()}:**\n{r}" for m, r in revised_responses.items()])
-    synthesis_prompt = f"**Consulta:**\n{contextual_prompt}\n\n**Debate de Expertos:**\n{synthesis_context}\n\n**Tu Tarea:** Modera y crea un informe final unificado."
+    synthesis_prompt = f"**Consulta (con historial):**\n{contextual_prompt}\n\n**Debate de Expertos:**\n{synthesis_context}\n\n**Tu Tarea:** Modera y crea un informe final unificado."
+    
+    # MEJORA: Añadir objetivos de consenso a la síntesis
+    if request.dissidenceContext:
+        confidence_level = request.dissidenceContext.get('confidenceLevel', 'balanced')
+        target_consensus = request.dissidenceContext.get('targetConsensus', 70)
+        synthesis_prompt += f"\n\n**Objetivo:** Crear una síntesis con nivel de confianza {confidence_level} (>{target_consensus}% consenso entre perspectivas)."
+    
+    # Manejar síntesis forzada
+    if request.dissidenceContext and request.dissidenceContext.get('forcedSynthesis'):
+        synthesis_prompt += "\n\n**INSTRUCCIÓN ESPECIAL:** Este es una síntesis forzada. Enfócate en los consensos existentes y presenta las diferencias restantes como perspectivas complementarias valiosas, no como conflictos a resolver."
     
     final_synthesis = await call_ai_model_no_stream('gemini', synthesis_prompt)
 
-    return {"revised": revised_responses, "synthesis": final_synthesis, "initial": initial_responses}
-
+    return {
+        "revised": revised_responses, 
+        "synthesis": final_synthesis, 
+        "initial": initial_responses,
+        "dissidenceContext": request.dissidenceContext  # Retornar contexto para referencia
+    }
 # ==============================================================================
 # INICIO DEL MÓDULO DE FACT-CHECKING (PEGAR AL FINAL DE LOS ENDPOINTS)
 # ==============================================================================
