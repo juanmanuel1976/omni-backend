@@ -407,53 +407,27 @@ async def debate_and_synthesize(request: DebateRequest):
     # CAMBIO CRÍTICO: Detectar si es la primera iteración del debate
     is_first_iteration = len(request.history) <= 1 or not any('Refinamiento dirigido' in turn.get('prompt', '') for turn in request.history)
     
-    ## ================ INICIO DEL BLOQUE A PEGAR ================
+    for model in models_order:
+        context = "\n\n".join([f"**Respuesta de {m.title()}:**\n{r}" for m, r in initial_responses.items() if m != model])
+        
+        # CAMBIO CRÍTICO: Diferentes prompts según la iteración
+        if is_first_iteration:
+            # Primera iteración: Debate rico y crítica robusta
+            base_critique = f"""**Tu Respuesta Inicial:**\n{initial_responses[model]}\n\n**Respuestas de Colegas:**\n{context}
 
-for model in models_order:
-    context = "\n\n".join([f"**Respuesta de {m.title()}:**\n{r}" for m, r in initial_responses.items() if m != model])
-    
-    if is_first_iteration:
-        # Primera iteración: Debate rico con verificación cruzada obligatoria
-        base_critique = f"""**Tu Respuesta Inicial:**
-{initial_responses[model]}
+**Tu Tarea:** Analiza críticamente las respuestas de tus colegas. Identifica fortalezas, debilidades y puntos ciegos en sus enfoques. Refina y mejora tu argumento incorporando nuevas perspectivas que enriquezcan el análisis."""
+        else:
+            # Segunda iteración en adelante: Convergencia dirigida
+            base_critique = f"""**Tu Respuesta Inicial:**\n{initial_responses[model]}\n\n**Respuestas de Colegas:**\n{context}
 
-**Respuestas de tus Colegas:**
-{context}
-
-**Tu Tarea: Revisión Crítica en 2 Pasos**
-
-**PASO 1: Protocolo de Verificación Cruzada (OBLIGATORIO)**
-- Antes de analizar, verifica rigurosamente los datos factuales de tus colegas (nombres, equipos, fechas, estadísticas).
-- Si detectas un error factual (ej: un jugador que no pertenece al club mencionado), DEBES señalarlo y corregirlo explícitamente en tu respuesta. La precisión es la máxima prioridad.
-- No integres información de otros si no estás 100% seguro de su veracidad.
-
-**PASO 2: Análisis Estratégico**
-- Una vez verificados los hechos, analiza críticamente los enfoques de tus colegas.
-- Identifica fortalezas, debilidades y puntos ciegos.
-- Refina y mejora tu propio argumento, incorporando solo la información verificada que enriquezca el análisis.
-"""
-    else:
-        # Segunda iteración en adelante: Convergencia con verificación
-        base_critique = f"""**Tu Respuesta Inicial:**
-{initial_responses[model]}
-
-**Respuestas de tus Colegas:**
-{context}
-
-**Tu Tarea: Convergencia con Verificación**
-- **Verificación Continua:** Si todavía observas algún dato factual incorrecto en las respuestas de tus colegas, señálalo.
-- **Integración y Síntesis:** Identifica los elementos valiosos y verificados de las otras respuestas para integrarlos en la tuya.
-- **Objetivo:** Reformula tu análisis para construir un consenso basado únicamente en información precisa.
-"""
-    
-    # Incluir contexto de refinamiento si existe
-    if request.dissidenceContext and request.dissidenceContext.get('userRefinementPrompt'):
-        user_guidance = request.dissidenceContext['userRefinementPrompt']
-        base_critique += f"\n\n**Orientación Específica del Usuario:** {user_guidance}"
-    
-    critique_prompts[model] = base_critique
-
-## ================= FIN DEL BLOQUE A PEGAR =================
+**Tu Tarea:** Identifica elementos valiosos de sus respuestas que puedas integrar. Reformula tu análisis manteniendo consensos y abordando solo UNA diferencia crítica que consideres fundamental."""
+        
+        # Incluir contexto de refinamiento si existe
+        if request.dissidenceContext and request.dissidenceContext.get('userRefinementPrompt'):
+            user_guidance = request.dissidenceContext['userRefinementPrompt']
+            base_critique += f"\n\n**Orientación Específica del Usuario:** {user_guidance}"
+        
+        critique_prompts[model] = base_critique
     
     critique_tasks = [call_ai_model_no_stream(m, critique_prompts[m]) for m in models_order]
     revised_results = await asyncio.gather(*critique_tasks)
