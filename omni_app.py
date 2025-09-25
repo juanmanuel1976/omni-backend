@@ -544,11 +544,37 @@ async def health_check():
         "version": "6.0",
         "features": ["dialectic_enhancements", "extended_timeout", "dissidence_analysis"]
     }
+# ==============================================================================
+# PEGA ESTE BLOQUE DE CÓDIGO DE DIAGNÓSTICO
+# ==============================================================================
+@app.get("/debug-gemini-url")
+async def debug_gemini_url():
+    """Endpoint temporal para verificar la URL de Gemini que usa el servidor."""
+    try:
+        # Recreamos la URL exactamente como lo hacen las otras funciones
+        url_stream = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:streamGenerateContent?key={GOOGLE_API_KEY}"
+        url_nostream = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={GOOGLE_API_KEY}"
+        
+        # Este es el valor que debería estar usando tu código.
+        # Lo imprimimos en los logs del servidor para verlo.
+        print("--- INICIO DEBUG ---")
+        print(f"URL de Streaming Verificada: {url_stream}")
+        print(f"URL No-Streaming Verificada: {url_nostream}")
+        print("--- FIN DEBUG ---")
+        
+        return {
+            "message": "Verificación completada. Revisa los logs de tu servidor en Render.",
+            "streaming_url_should_be": url_stream,
+            "nostream_url_should_be": url_nostream
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
