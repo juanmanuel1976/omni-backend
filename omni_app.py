@@ -219,112 +219,120 @@ async def call_ai_model_no_stream(model_name: str, prompt: str):
         return f"Error en {model_name}: {e}"
 
 # ==============================================================================
-# MODIFICACIONES PARA omni_app.py - Análisis Semántico con Claude
+# PEGA ESTE NUEVO SEGMENTO
 # ==============================================================================
-
-# 1. AGREGAR ESTA FUNCIÓN después de la función call_ai_model_no_stream (línea ~140)
-
-async def analyze_semantic_consensus_with_claude(responses):
-    """Usa Claude para analizar consenso semántico entre respuestas"""
+def build_mediator_prompt(responses_to_analyze: Dict[str, str]):
+    """Construye un prompt genérico para que cualquier IA actúe como mediador."""
+    model_names = list(responses_to_analyze.keys())
+    response_texts = list(responses_to_analyze.values())
     
-    # Construir prompt para análisis de consenso
-    consensus_prompt = f"""Analiza el nivel de consenso conceptual entre estas tres respuestas sobre el mismo tema.
+    if len(model_names) < 2:
+        return ""
 
-**Respuesta Gemini:**
-{responses.get('gemini', '')}
+    return f"""Analiza el nivel de consenso conceptual entre estas dos respuestas sobre el mismo tema.
 
-**Respuesta DeepSeek:**
-{responses.get('deepseek', '')}
+**Respuesta de {model_names[0].title()}:**
+{response_texts[0]}
 
-**Respuesta Claude:**
-{responses.get('claude', '')}
+**Respuesta de {model_names[1].title()}:**
+{response_texts[1]}
 
 **Tu tarea como mediador neutral:**
-1. Identifica conceptos centrales comunes (aunque usen palabras diferentes)
-2. Detecta áreas de consenso real vs divergencia superficial  
-3. Calcula un porcentaje de consenso conceptual (0-100%)
-4. Lista los puntos específicos de consenso fuerte
+1. Identifica conceptos centrales comunes (aunque usen palabras diferentes).
+2. Calcula un porcentaje de consenso conceptual (0-100%).
+3. Lista los puntos específicos de consenso fuerte.
+4. Lista las áreas clave de divergencia.
 
-**Criterios de evaluación:**
-- Consenso fuerte: Conceptos donde los 3 modelos coinciden sustancialmente
-- Consenso moderado: Conceptos donde 2 modelos coinciden
-- Divergencia: Conceptos donde hay desacuerdo real
-
-**Formato de respuesta (JSON válido):**
+**Formato de respuesta (JSON válido y nada más):**
 {{
     "consensus_score": [número entre 0-100],
-    "strong_consensus": ["concepto1", "concepto2"],
-    "moderate_consensus": ["concepto3", "concepto4"], 
-    "divergence_areas": ["área1", "área2"],
-    "explanation": "explicación breve de 1-2 líneas"
+    "strong_consensus": ["concepto común 1", "concepto común 2"],
+    "divergence_areas": ["área de divergencia 1", "área de divergencia 2"],
+    "explanation": "explicación muy breve de 1 línea"
 }}
 
-Responde SOLO con el JSON válido, sin texto adicional."""
-    
-    try:
-        # Usar Claude para análisis semántico
-        consensus_analysis = await call_ai_model_no_stream('claude', consensus_prompt)
-        
-        # Limpiar respuesta por si tiene texto extra
-        json_start = consensus_analysis.find('{')
-        json_end = consensus_analysis.rfind('}') + 1
-        if json_start != -1 and json_end != -1:
-            json_content = consensus_analysis[json_start:json_end]
-        else:
-            json_content = consensus_analysis
-        
-        # Parsear respuesta JSON
-        result = json.loads(json_content)
-        
-        # Validar que el score esté en rango válido
-        if 'consensus_score' in result:
-            result['consensus_score'] = max(0, min(100, result['consensus_score']))
-        
-        return result
-        
-    except json.JSONDecodeError as e:
-        print(f"Error parsing JSON: {e}")
-        print(f"Raw response: {consensus_analysis}")
-        # Fallback con score básico
-        return {
-            "consensus_score": 50,
-            "strong_consensus": [],
-            "moderate_consensus": [],
-            "divergence_areas": ["Error en análisis"],
-            "explanation": "Error al procesar análisis semántico"
-        }
-    except Exception as e:
-        print(f"Error en análisis semántico: {e}")
-        # Fallback básico
-        return {
-            "consensus_score": 30,
-            "strong_consensus": [],
-            "moderate_consensus": [],
-            "divergence_areas": ["Error de conexión"],
-            "explanation": "Error en análisis semántico"
-        }
+Responde únicamente con el objeto JSON, sin texto introductorio ni comentarios adicionales."""
 
-# 2. AGREGAR NUEVO MODELO para el request (después de DebateRequest, línea ~55)
+async def analyze_consensus_by_peer_review(responses: Dict[str, str]):
+    """Usa un sistema de Revisión por Pares (Peer Review) para un análisis de consenso más robusto."""
+    
+    models = list(responses.keys())
+    tasks = []
+
+    for mediator in models:
+        models_to_analyze = {k: v for k, v in responses.items() if k != mediator}
+        
+        if len(models_to_analyze) >= 2:
+            prompt = build_mediator_prompt(models_to_analyze)
+            tasks.append(call_ai_model_no_stream(mediator, prompt))
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    valid_scores = []
+    all_strong_consensus = set()
+    all_divergence_areas = set()
+    all_explanations = []
+
+    for i, result in enumerate(results):
+        mediator = models[i]
+        if isinstance(result, Exception):
+            print(f"Error en la mediación de {mediator}: {result}")
+            continue
+        
+        try:
+            json_start = result.find('{')
+            json_end = result.rfind('}') + 1
+            if json_start != -1 and json_end != -1:
+                json_content = result[json_start:json_end]
+                data = json.loads(json_content)
+                
+                if 'consensus_score' in data and isinstance(data['consensus_score'], (int, float)):
+                    score = max(0, min(100, data['consensus_score']))
+                    valid_scores.append(score)
+                    all_strong_consensus.update(data.get('strong_consensus', []))
+                    all_divergence_areas.update(data.get('divergence_areas', []))
+                    if data.get('explanation'):
+                        all_explanations.append(f"({mediator.title()}: {data['explanation']})")
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"Error procesando la respuesta JSON de {mediator}: {e}. Respuesta cruda: {result}")
+
+    if not valid_scores:
+        final_score = 30
+        final_explanation = "Fallo en el análisis de consenso por mediadores."
+    else:
+        final_score = round(sum(valid_scores) / len(valid_scores))
+        final_explanation = "Consenso promediado por revisión de pares. " + " ".join(all_explanations)
+
+    return {
+        "consensus_score": final_score,
+        "strong_consensus": list(all_strong_consensus),
+        "moderate_consensus": [],
+        "divergence_areas": list(all_divergence_areas),
+        "explanation": final_explanation
+    }
+
 
 class SemanticConsensusRequest(BaseModel):
     responses: Dict[str, str]
 
-# 3. AGREGAR NUEVO ENDPOINT (al final de los endpoints, antes de @app.get("/"), línea ~280)
-
 @app.post('/api/semantic-consensus')
 async def semantic_consensus_endpoint(request: SemanticConsensusRequest):
-    """Endpoint para análisis semántico de consenso usando Claude como mediador"""
+    """Endpoint para análisis semántico de consenso usando Revisión por Pares."""
     try:
-        result = await analyze_semantic_consensus_with_claude(request.responses)
+        valid_responses = {k: v for k, v in request.responses.items() if v and v.strip()}
+        if len(valid_responses) < 2:
+            return {
+                "consensus_score": 100,
+                "strong_consensus": ["N/A"], "moderate_consensus": [], "divergence_areas": [],
+                "explanation": "No hay suficientes respuestas válidas para comparar."
+            }
+        
+        result = await analyze_consensus_by_peer_review(valid_responses)
         return result
     except Exception as e:
-        return {
-            "consensus_score": 25,
-            "strong_consensus": [],
-            "moderate_consensus": [],
-            "divergence_areas": ["Error del servidor"],
-            "explanation": f"Error: {str(e)}"
-        }
+        print(f"Error fatal en el endpoint de consenso: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error del servidor durante el análisis de consenso: {str(e)}")
+
 # --- RUTAS DE LA APLICACIÓN ---
 @app.post('/api/generate')
 async def generate_initial_stream(request: GenerateRequest):
@@ -541,5 +549,6 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
