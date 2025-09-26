@@ -6,10 +6,5 @@ anthropic
 pydantic
 WeasyPrint
 pypdf
-langchain
-sentence-transformers
-faiss-cpu
-langchain-community
 python-multipart
-langchain-huggingface
-
+langchain
