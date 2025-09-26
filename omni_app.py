@@ -137,7 +137,7 @@ async def stream_gemini(prompt):
         return
     try:
         async with httpx.AsyncClient(timeout=360.0) as client:  # TIMEOUT EXTENDIDO A 6 MINUTOS
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key={GOOGLE_API_KEY}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key={GOOGLE_API_KEY}"
             payload = {"contents": [{"parts": [{"text": prompt}]}]}
             async with client.stream("POST", url, json=payload) as response:
                 if response.status_code != 200:
@@ -198,7 +198,7 @@ async def call_ai_model_no_stream(model_name: str, prompt: str):
         async with httpx.AsyncClient(timeout=360.0) as client:  # TIMEOUT EXTENDIDO A 6 MINUTOS
             if model_name == "gemini":
                 if not GOOGLE_API_KEY: return "Error: GOOGLE_API_KEY no configurada."
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GOOGLE_API_KEY}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GOOGLE_API_KEY}"
                 payload = {"contents": [{"parts": [{"text": prompt}]}]}
                 r = await client.post(url, json=payload)
                 if r.status_code != 200: return f"Error HTTP {r.status_code}: {r.text}"
@@ -541,5 +541,6 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
