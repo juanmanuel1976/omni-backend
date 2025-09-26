@@ -6,7 +6,7 @@ import httpx
 import os
 import json
 import pypdf # Añadido para RAG
-from fastapi import FastAPI, HTTPException, File, UploadFile
+from fastapi import FastAPI, HTTPException, File, UploadFile, Form
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -352,7 +352,9 @@ Contexto de la consulta original: "{original_query}"
 # --- RUTAS DE LA APLICACIÓN (ENDPOINTS) ---
 
 @app.post("/api/rag-analysis")
-async def rag_analysis_and_synthesize(prompt: str, history_json: str = "", files: List[UploadFile] = File(...)):
+from fastapi import Form
+
+async def rag_analysis_and_synthesize(prompt: str = Form(...), history_json: str = Form("[]"), files: List[UploadFile] = File(...)):
     if not files:
         raise HTTPException(status_code=400, detail="No se han subido archivos.")
 
@@ -518,3 +520,4 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
