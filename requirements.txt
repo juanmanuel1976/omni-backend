@@ -5,4 +5,8 @@ httpx
 anthropic
 pydantic
 WeasyPrint
+pypdf
+langchain
+sentence-transformers
+faiss-cpu
 
