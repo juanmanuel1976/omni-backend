@@ -14,8 +14,6 @@ from typing import Dict, Optional, List
 from anthropic import AsyncAnthropic
 # Nuevas importaciones para RAG
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import SentenceTransformerEmbeddings
 
 # --- CONFIGURACIÓN DE CLAVES DE API (DESDE EL ENTORNO) ---
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
@@ -96,12 +94,6 @@ def get_text_chunks(text: str) -> List[str]:
     )
     chunks = text_splitter.split_text(text)
     return chunks
-
-def get_vectorstore(text_chunks: List[str]):
-    """Crea el catálogo de vectores (Vector Store)."""
-    embeddings = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
-    vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
-    return vectorstore
 
 
 # --- LÓGICA DE PROMPTS ---
@@ -355,7 +347,7 @@ Contexto de la consulta original: "{original_query}"
 async def rag_analysis_and_synthesize(prompt: str = Form(...), history_json: str = Form("[]"), files: List[UploadFile] = File(...)):
     if not files:
         raise HTTPException(status_code=400, detail="No se han subido archivos.")
-
+    
     history = json.loads(history_json) if history_json else []
 
     # 1. Extraer texto de los documentos
@@ -363,35 +355,38 @@ async def rag_analysis_and_synthesize(prompt: str = Form(...), history_json: str
     if not raw_text.strip():
         raise HTTPException(status_code=400, detail="Los documentos subidos no contienen texto extraíble.")
 
-    # 2. Dividir texto en chunks
-    text_chunks = get_text_chunks(raw_text)
+    # 2. Dividir texto en chunks simples (sin librerías pesadas)
+    # Es necesario importar esta clase al principio del archivo
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200, length_function=len)
+    chunks = text_splitter.split_text(raw_text)
 
-    # 3. Crear el catálogo de vectores
-    vectorstore = get_vectorstore(text_chunks)
+    # 3. Usar una IA para la recuperación semántica (NUEVA LÓGICA LIVIANA)
+    # Convertimos la lista de chunks a un string numerado para el prompt
+    chunk_list_str = "\n".join([f"Fragmento {i+1}:\n{chunk}\n---" for i, chunk in enumerate(chunks)])
+    
+    retrieval_prompt = f"""De la siguiente lista de fragmentos de texto, extrae únicamente los 3 más relevantes para responder a la pregunta del usuario. Devuelve solo el texto de esos 3 fragmentos, sin añadir explicaciones ni los números de fragmento.
 
-    # 4. Encontrar los chunks más relevantes para el prompt
-    docs = vectorstore.similarity_search(prompt, k=5)
-    context = "\n\n".join([doc.page_content for doc in docs])
+Pregunta del Usuario: "{prompt}"
 
-    # 5. Crear el "Prompt Aumentado"
+Lista de Fragmentos:
+{chunk_list_str}
+"""
+    # Usamos Gemini para esta tarea por su velocidad y ventana de contexto
+    context = await call_ai_model_no_stream('gemini', retrieval_prompt)
+    
+    # 4. Crear el "Prompt Aumentado" y llamar al debate
     augmented_prompt = f"""Basándote exclusivamente en el siguiente contexto extraído de los documentos proporcionados, debate y responde a la pregunta del usuario.
 
-**Contexto Relevante:**
+Contexto Relevante:
 ---
 {context}
 ---
 
-**Pregunta del Usuario:**
+Pregunta del Usuario:
 {prompt}
 """
-
-    # 6. Llamar al debate con el prompt aumentado
-    rag_request = DebateRequest(
-        prompt=augmented_prompt,
-        history=history,
-        isDocument=True
-    )
-
+    rag_request = DebateRequest(prompt=augmented_prompt, history=history, isDocument=True)
     return await debate_and_synthesize(rag_request)
 
 @app.post('/api/generate')
@@ -518,5 +513,6 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
