@@ -10,4 +10,5 @@ langchain
 sentence-transformers
 faiss-cpu
 langchain-community
+python-multipart
 
