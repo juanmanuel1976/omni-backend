@@ -14,8 +14,8 @@ from typing import Dict, Optional, List
 from anthropic import AsyncAnthropic
 # Nuevas importaciones para RAG
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores import FAISS
-from langchain.embeddings import SentenceTransformerEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain_community.embeddings import SentenceTransformerEmbeddings
 
 # --- CONFIGURACIÓN DE CLAVES DE API (DESDE EL ENTORNO) ---
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
@@ -352,8 +352,6 @@ Contexto de la consulta original: "{original_query}"
 # --- RUTAS DE LA APLICACIÓN (ENDPOINTS) ---
 
 @app.post("/api/rag-analysis")
-from fastapi import Form
-
 async def rag_analysis_and_synthesize(prompt: str = Form(...), history_json: str = Form("[]"), files: List[UploadFile] = File(...)):
     if not files:
         raise HTTPException(status_code=400, detail="No se han subido archivos.")
@@ -520,4 +518,5 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
