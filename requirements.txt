@@ -8,3 +8,4 @@ WeasyPrint
 pypdf
 python-multipart
 langchain
+langchain-community
