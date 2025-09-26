@@ -11,4 +11,5 @@ sentence-transformers
 faiss-cpu
 langchain-community
 python-multipart
+langchain-huggingface
 
