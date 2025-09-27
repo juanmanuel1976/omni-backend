@@ -55,7 +55,7 @@ class DebateRequest(BaseModel):
     prompt: str
     history: list = []
     initial_responses: Optional[Dict[str, str]] = None
-    dissidenceContext: Optional[Dict] = None
+    dissidenceContext: Optional[Dict] = None # << AÑADIMOS ESTA LÍNEA
     isDocument: bool = False
 
 class SemanticConsensusRequest(BaseModel):
@@ -135,7 +135,10 @@ def build_contextual_prompt(user_prompt, history, mode, isDocument=False):
 
 
 def build_enhanced_dialectic_prompt(base_prompt, dissidence_context=None):
-    # ... (El código de esta función no necesita cambios) ...
+    """
+    Construye un prompt dialéctico mejorado que incorpora las directivas
+    específicas del usuario desde el frontend.
+    """
     enhanced_prompt = base_prompt
     if dissidence_context:
         user_refinement = dissidence_context.get('userRefinementPrompt', '')
@@ -143,22 +146,24 @@ def build_enhanced_dialectic_prompt(base_prompt, dissidence_context=None):
         target_consensus = dissidence_context.get('targetConsensus', 70)
         included_dissidences = dissidence_context.get('includedDissidences', [])
         excluded_dissidences = dissidence_context.get('excludedDissidences', [])
-        refinement_section = f"""
 
-**INSTRUCCIONES DE REFINAMIENTO:**
-- **Nivel de Confianza Objetivo:** {confidence_level.title()} (>{target_consensus}% consenso)
-- **Orientación del Usuario:** {user_refinement}
-"""
+        refinement_section = f"\n\n**INSTRUCCIONES DE REFINAMIENTO DIRIGIDO POR EL USUARIO:**"
+        
+        refinement_section += f"\n- **Nivel de Confianza Objetivo:** Apunta a un análisis de nivel '{confidence_level.title()}', lo que implica un consenso conceptual superior al {target_consensus}%."
+        
+        if user_refinement:
+            refinement_section += f"\n- **Directiva Principal del Usuario:** \"{user_refinement}\""
+
         if included_dissidences:
+            # Extraemos las descripciones de las disidencias a incluir
             dissidence_descriptions = [d.get('description', '') for d in included_dissidences]
-            refinement_section += f"""
-- **Disidencias a Abordar:** {'; '.join(dissidence_descriptions)}
-"""
+            refinement_section += f"\n- **Disidencias a Resolver (Prioridad Alta):** Debes abordar y encontrar un punto medio en las siguientes áreas de desacuerdo: {'; '.join(dissidence_descriptions)}."
+
         if excluded_dissidences:
+            # Extraemos las descripciones de las disidencias a excluir
             excluded_descriptions = [d.get('description', '') for d in excluded_dissidences]
-            refinement_section += f"""
-- **Aspectos a Evitar:** {'; '.join(excluded_descriptions)}
-"""
+            refinement_section += f"\n- **Aspectos a Excluir o Evitar:** No profundices en los siguientes puntos: {'; '.join(excluded_descriptions)}."
+            
         enhanced_prompt += refinement_section
     return enhanced_prompt
 
@@ -498,43 +503,54 @@ async def refine_and_synthesize(request: RefineRequest):
 
 @app.post('/api/debate')
 async def debate_and_synthesize(request: DebateRequest):
-    # ... (El código de esta función no necesita cambios) ...
     contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'direct', request.isDocument)
+    
+    # NUEVO: Si existe dissidenceContext, se enriquece el prompt
     if request.dissidenceContext:
         contextual_prompt = build_enhanced_dialectic_prompt(contextual_prompt, request.dissidenceContext)
+
     if request.initial_responses:
-        initial_responses = {k: v['content'] for k, v in request.initial_responses.items()}
+        initial_responses = {k: v.get('content', '') if isinstance(v, dict) else v for k, v in request.initial_responses.items()}
     else:
         initial_tasks = [call_ai_model_no_stream(m, contextual_prompt) for m in ['gemini', 'deepseek', 'claude']]
         results = await asyncio.gather(*initial_tasks)
         initial_responses = {'gemini': results[0], 'deepseek': results[1], 'claude': results[2]}
+
     critique_prompts = {}
     models_order = ['gemini', 'deepseek', 'claude']
-    is_first_iteration = len(request.history) <= 1 or not any('Refinamiento dirigido' in turn.get('prompt', '') for turn in request.history)
+    
+    # NUEVO: Lógica para determinar si es una primera iteración o un refinamiento
+    is_refinement_iteration = bool(request.dissidenceContext and request.dissidenceContext.get('userRefinementPrompt'))
+
     for model in models_order:
         context = "\n\n".join([f"**Respuesta de {m.title()}:**\n{r}" for m, r in initial_responses.items() if m != model])
-        if is_first_iteration:
-            base_critique = f"""**Tu Respuesta Inicial:**\n{initial_responses[model]}\n\n**Respuestas de Colegas:**\n{context}\n\n**Tu Tarea:** Analiza críticamente las respuestas de tus colegas. Identifica fortalezas, debilidades y puntos ciegos en sus enfoques. Refina y mejora tu argumento incorporando nuevas perspectivas que enriquezcan el análisis."""
+        
+        if not is_refinement_iteration:
+            # Prompt para la primera ronda de debate
+            base_critique = f"""**Tu Respuesta Inicial:**\n{initial_responses[model]}\n\n**Respuestas de Colegas:**\n{context}\n\n**Tu Tarea (Ronda 1 - Crítica Abierta):** Analiza críticamente las respuestas de tus colegas. Identifica fortalezas, debilidades y puntos ciegos. Refina y mejora tu propio argumento incorporando las perspectivas valiosas para enriquecer el análisis global."""
         else:
-            base_critique = f"""**Tu Respuesta Inicial:**\n{initial_responses[model]}\n\n**Respuestas de Colegas:**\n{context}\n\n**Tu Tarea:** Identifica elementos valiosos de sus respuestas que puedas integrar. Reformula tu análisis manteniendo consensos y abordando solo UNA diferencia crítica que consideres fundamental."""
-        if request.dissidenceContext and request.dissidenceContext.get('userRefinementPrompt'):
-            user_guidance = request.dissidenceContext['userRefinementPrompt']
-            base_critique += f"\n\n**Orientación Específica del Usuario:** {user_guidance}"
+            # Prompt para rondas de refinamiento dirigidas por el usuario
+            base_critique = f"""**Tu Respuesta Anterior:**\n{initial_responses[model]}\n\n**Respuestas de Colegas (Ronda Anterior):**\n{context}\n\n**Tu Tarea (Ronda de Refinamiento):** El usuario ha dado nuevas instrucciones (detalladas en la consulta principal). Tu objetivo es integrar estas directivas. Reformula tu análisis para alinearte con la guía del usuario, manteniendo los consensos ya logrados y abordando las diferencias críticas señaladas."""
+
         critique_prompts[model] = base_critique
+    
     critique_tasks = [call_ai_model_no_stream(m, critique_prompts[m]) for m in models_order]
     revised_results = await asyncio.gather(*critique_tasks)
     revised_responses = dict(zip(models_order, revised_results))
+    
     synthesis_context = "\n\n".join([f"**Argumento Revisado de {m.title()}:**\n{r}" for m, r in revised_responses.items()])
-    synthesis_prompt = f"**Consulta (con historial):**\n{contextual_prompt}\n\n**Debate de Expertos:**\n{synthesis_context}\n\n**Tu Tarea:** Modera y crea un informe final unificado."
-    if request.dissidenceContext:
-        confidence_level = request.dissidenceContext.get('confidenceLevel', 'balanced')
-        target_consensus = request.dissidenceContext.get('targetConsensus', 70)
-        synthesis_prompt += f"\n\n**Objetivo:** Crear una síntesis con nivel de confianza {confidence_level} (>{target_consensus}% consenso entre perspectivas)."
-    if request.dissidenceContext and request.dissidenceContext.get('forcedSynthesis'):
-        synthesis_prompt += "\n\n**INSTRUCCIÓN ESPECIAL:** Este es una síntesis forzada. Enfócate en los consensos existentes y presenta las diferencias restantes como perspectivas complementarias valiosas, no como conflictos a resolver."
-    final_synthesis = await call_ai_model_no_stream('gemini', synthesis_prompt)
-    return { "revised": revised_responses, "synthesis": final_synthesis, "initial": initial_responses, "dissidenceContext": request.dissidenceContext }
+    
+    # El prompt de síntesis ahora incluye el contextual_prompt completo con las directivas
+    synthesis_prompt = f"**Consulta Original (con historial y directivas de refinamiento):**\n{contextual_prompt}\n\n**Debate de Expertos (Argumentos Revisados):**\n{synthesis_context}\n\n**Tu Tarea Final como Moderador:** Eres un experto en síntesis estratégica. Tu objetivo es crear un informe final unificado y coherente. Integra los argumentos revisados de los expertos en una única respuesta. Asegúrate de seguir TODAS las instrucciones y directivas de refinamiento dadas en la consulta original. La síntesis debe ser clara, accionable y responder directamente a la petición del usuario."
 
+    # NUEVO: Instrucción especial para la síntesis forzada
+    if request.dissidenceContext and request.dissidenceContext.get('forcedSynthesis'):
+        synthesis_prompt += "\n\n**INSTRUCCIÓN ESPECIAL DE SÍNTESIS FORZADA:** El usuario ha solicitado finalizar el debate. Enfócate en los consensos existentes y presenta las diferencias restantes como perspectivas complementarias o áreas para futura exploración, no como conflictos a resolver. El objetivo es entregar un resultado accionable con la información disponible."
+
+    final_synthesis = await call_ai_model_no_stream('gemini', synthesis_prompt)
+    
+    return { "revised": revised_responses, "synthesis": final_synthesis, "initial": initial_responses, "dissidenceContext": request.dissidenceContext }
+    
 @app.post('/api/semantic-consensus')
 async def semantic_consensus_endpoint(request: SemanticConsensusRequest):
     # ... (El código de esta función no necesita cambios) ...
@@ -585,6 +601,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
