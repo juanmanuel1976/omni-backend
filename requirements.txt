@@ -7,5 +7,7 @@ pydantic
 WeasyPrint
 pypdf
 python-multipart
-langchain
-langchain-community
+sentence-transformers
+faiss-cpu
+numpy
+torch
