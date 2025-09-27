@@ -86,7 +86,13 @@ async def get_text_from_files(files: List[UploadFile]) -> str:
         else:
             print(f"Archivo no soportado: {file.filename} ({file.content_type})")
     return text
-
+    
+def get_text_chunks(text: str) -> List[str]:
+    """
+    FUNCIÓN NUEVA: Usa el smart_text_split del RAG Manager.
+    División inteligente optimizada sin dependencias de langchain.
+    """
+    return rag_manager.smart_text_split(text, chunk_size=1000, overlap=200)
 
 
 
@@ -556,11 +562,30 @@ async def health_check():
         "version": "6.1",
         "features": ["dialectic_enhancements", "extended_timeout", "dissidence_analysis", "rag_pipeline"]
     }
+@app.get("/api/rag-stats")
+async def get_rag_stats():
+    """Endpoint para monitorear el estado del RAG Manager."""
+    return {
+        "status": "healthy", 
+        "rag_stats": rag_manager.get_stats(),
+        "memory_usage": "optimized_for_standard_plan"
+    }
 
+@app.on_event("startup")
+async def startup_event():
+    """Inicialización optimizada del RAG Manager al startup."""
+    try:
+        print("Inicializando RAG Manager en startup...")
+        await rag_manager.initialize()
+        print("RAG Manager listo para análisis de documentos")
+    except Exception as e:
+        print(f"Error inicializando RAG Manager: {e}")
+        
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
