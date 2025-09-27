@@ -87,15 +87,7 @@ async def get_text_from_files(files: List[UploadFile]) -> str:
             print(f"Archivo no soportado: {file.filename} ({file.content_type})")
     return text
 
-def get_text_chunks(text: str) -> List[str]:
-    """Divide el texto en fragmentos (chunks)."""
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200,
-        length_function=len
-    )
-    chunks = text_splitter.split_text(text)
-    return chunks
+
 
 
 # --- LÓGICA DE PROMPTS ---
@@ -347,50 +339,104 @@ Contexto de la consulta original: "{original_query}"
 
 @app.post("/api/rag-analysis")
 async def rag_analysis_and_synthesize(prompt: str = Form(...), history_json: str = Form("[]"), files: List[UploadFile] = File(...)):
+    """
+    FUNCIÓN REEMPLAZADA: RAG real con sentence-transformers + FAISS.
+    Máximo aprovechamiento del plan Render Standard ($25).
+    """
     if not files:
         raise HTTPException(status_code=400, detail="No se han subido archivos.")
     
-    history = json.loads(history_json) if history_json else []
+    try:
+        history = json.loads(history_json) if history_json else []
 
-    # 1. Extraer texto de los documentos
-    raw_text = await get_text_from_files(files)
-    if not raw_text.strip():
-        raise HTTPException(status_code=400, detail="Los documentos subidos no contienen texto extraíble.")
+        # 1. Extraer texto de los documentos (función existente, sin cambios)
+        raw_text = await get_text_from_files(files)
+        if not raw_text.strip():
+            raise HTTPException(status_code=400, detail="Los documentos subidos no contienen texto extraíble.")
 
-    # 2. Dividir texto en chunks simples (sin librerías pesadas)
-    # Es necesario importar esta clase al principio del archivo
-    from langchain.text_splitter import RecursiveCharacterTextSplitter
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200, length_function=len)
-    chunks = text_splitter.split_text(raw_text)
+        print(f"Texto extraído: {len(raw_text)} caracteres")
 
-    # 3. Usar una IA para la recuperación semántica (NUEVA LÓGICA LIVIANA)
-    # Convertimos la lista de chunks a un string numerado para el prompt
-    chunk_list_str = "\n".join([f"Fragmento {i+1}:\n{chunk}\n---" for i, chunk in enumerate(chunks)])
-    
-    retrieval_prompt = f"""De la siguiente lista de fragmentos de texto, extrae únicamente los 3 más relevantes para responder a la pregunta del usuario. Devuelve solo el texto de esos 3 fragmentos, sin añadir explicaciones ni los números de fragmento.
+        # 2. NUEVO: Indexar documento con RAG Manager de alta potencia
+        print("Inicializando RAG Manager...")
+        await rag_manager.initialize()
+        
+        # Metadata del documento
+        document_metadata = {
+            "file_names": [file.filename for file in files],
+            "total_files": len(files),
+            "upload_timestamp": datetime.utcnow().isoformat()
+        }
+        
+        # Indexar documento completo
+        indexing_success = await rag_manager.index_documents(raw_text, document_metadata)
+        if not indexing_success:
+            raise HTTPException(status_code=500, detail="Error indexando documentos para análisis RAG.")
 
-Pregunta del Usuario: "{prompt}"
+        # 3. NUEVO: Búsqueda semántica de contexto relevante
+        print(f"Ejecutando búsqueda semántica para: '{prompt[:100]}...'")
+        relevant_context = await rag_manager.get_context_for_query(prompt, max_context_length=4000)
+        
+        if not relevant_context:
+            raise HTTPException(status_code=400, detail="No se encontró contenido relevante en los documentos para la consulta.")
 
-Lista de Fragmentos:
-{chunk_list_str}
-"""
-    # Usamos Gemini para esta tarea por su velocidad y ventana de contexto
-    context = await call_ai_model_no_stream('gemini', retrieval_prompt)
-    
-    # 4. Crear el "Prompt Aumentado" y llamar al debate
-    augmented_prompt = f"""Basándote exclusivamente en el siguiente contexto extraído de los documentos proporcionados, debate y responde a la pregunta del usuario.
+        # 4. Estadísticas del RAG para debugging
+        rag_stats = rag_manager.get_stats()
+        print(f"RAG Stats: {rag_stats}")
 
-Contexto Relevante:
----
-{context}
----
+        # 5. MEJORADO: Prompt de análisis con contexto semántico real
+        augmented_prompt = f"""ANÁLISIS DE DOCUMENTOS CON RAG SEMÁNTICO
 
-Pregunta del Usuario:
+**Contexto Extraído (por relevancia semántica):**
+{relevant_context}
+
+**Consulta del Usuario:**
 {prompt}
-"""
-    rag_request = DebateRequest(prompt=augmented_prompt, history=history, isDocument=True)
-    return await debate_and_synthesize(rag_request)
 
+**Instrucciones de Análisis:**
+1. Prioriza la información del contexto extraído, que es semánticamente relevante a la consulta
+2. Identifica claramente qué información viene del documento vs conocimiento externo
+3. Si detectas inconsistencias o información incompleta, señálalo
+4. Proporciona un análisis completo y contextualizado
+
+**Estadísticas del Análisis:**
+- Chunks analizados: {rag_stats.get('total_chunks', 0)}
+- Documentos procesados: {len(files)}
+- Modelo de embeddings: {rag_stats.get('model_name', 'N/A')}
+"""
+
+        # 6. Ejecutar debate dialéctico con contexto RAG
+        rag_request = DebateRequest(
+            prompt=augmented_prompt, 
+            history=history, 
+            isDocument=True  # Importante: mantiene compatibilidad
+        )
+        
+        # Llamar al sistema de debate existente
+        result = await debate_and_synthesize(rag_request)
+        
+        # 7. NUEVO: Agregar metadata RAG al resultado
+        if isinstance(result, dict):
+            result["rag_metadata"] = {
+                "stats": rag_stats,
+                "context_length": len(relevant_context),
+                "source_files": [file.filename for file in files]
+            }
+        
+        # 8. Limpiar índice para liberar memoria (importante en plan Standard)
+        rag_manager.clear_index()
+        
+        print("Análisis RAG completado exitosamente")
+        return result
+
+    except HTTPException:
+        # Re-lanzar excepciones HTTP sin modificar
+        raise
+    except Exception as e:
+        print(f"Error en análisis RAG: {str(e)}")
+        # Limpiar en caso de error
+        rag_manager.clear_index()
+        raise HTTPException(status_code=500, detail=f"Error interno en análisis RAG: {str(e)}")
+        
 @app.post('/api/generate')
 async def generate_initial_stream(request: GenerateRequest):
     # ... (El código de esta función no necesita cambios) ...
@@ -515,6 +561,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
