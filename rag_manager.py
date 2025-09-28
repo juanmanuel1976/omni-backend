@@ -19,7 +19,7 @@ class RAGManager:
     Usa sentence-transformers + FAISS para búsqueda semántica de alta calidad.
     """
     
-    def __init__(self, model_name: str = "all-mpnet-base-v2"):
+    def __init__(self, model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"):
         """
         Inicializa el RAG Manager con máxima potencia.
         
