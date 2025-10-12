@@ -11,3 +11,5 @@ sentence-transformers
 faiss-cpu
 numpy
 torch
+google-cloud-vision==3.7.0
+pdf2image==1.16.3
