@@ -17,7 +17,7 @@ import logging
 from datetime import datetime
 from ocr_processor import ocr_processor
 
-# --- CONFIGURACIÓN DE CLAVES DE API (DESDE EL ENTORNO) ---
+# --- CONFIGURACIÓN DE CLAVES DE API (DESDE EL ENTORNO) --
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
@@ -531,5 +531,6 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
