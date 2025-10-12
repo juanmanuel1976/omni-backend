@@ -4,14 +4,16 @@ gunicorn
 httpx
 anthropic
 pydantic
+WeasyPrint
 pypdf
 python-multipart
-torch==1.13.1
-sentence-transformers==2.2.2
-faiss-cpu==1.7.4
+sentence-transformers
+faiss-cpu
 numpy
+torch
 google-cloud-vision==3.7.0
 pymupdf==1.25.7
+
 
 
 
