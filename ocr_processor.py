@@ -1,6 +1,6 @@
 import logging
 from google.cloud import vision
-from pdf2image import convert_from_bytes
+import fitz  # PyMuPDF
 import io
 import os
 from google.api_core.client_options import ClientOptions
@@ -58,6 +58,7 @@ class OCRProcessor:
     async def extract_text_with_ocr(self, pdf_bytes: bytes, max_pages: int = None) -> str:
         """
         Extrae texto de PDF escaneado usando OCR.
+        Usa PyMuPDF para convertir PDF a imágenes (NO necesita poppler).
         """
         client = self._get_client()
         
@@ -66,22 +67,26 @@ class OCRProcessor:
             return ""
         
         try:
-            # Convertir PDF a imágenes
-            logger.info("Convirtiendo PDF a imágenes para OCR...")
-            images = convert_from_bytes(pdf_bytes, dpi=200, fmt='jpeg')
+            # Abrir PDF con PyMuPDF
+            logger.info("Convirtiendo PDF a imágenes para OCR con PyMuPDF...")
+            pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
             
-            if max_pages:
-                images = images[:max_pages]
+            total_pages = len(pdf_document)
+            pages_to_process = min(total_pages, max_pages) if max_pages else total_pages
             
-            logger.info(f"Procesando {len(images)} páginas con OCR...")
+            logger.info(f"Procesando {pages_to_process} páginas con OCR...")
             
             all_text = []
             
-            for i, image in enumerate(images):
-                # Convertir imagen a bytes
-                img_byte_arr = io.BytesIO()
-                image.save(img_byte_arr, format='JPEG')
-                img_bytes = img_byte_arr.getvalue()
+            for page_num in range(pages_to_process):
+                # Convertir página a imagen
+                page = pdf_document[page_num]
+                
+                # Renderizar página a imagen (300 DPI para mejor calidad OCR)
+                pix = page.get_pixmap(matrix=fitz.Matrix(300/72, 300/72))
+                
+                # Convertir a bytes JPEG
+                img_bytes = pix.tobytes("jpeg")
                 
                 # Llamar a Vision API
                 vision_image = vision.Image(content=img_bytes)
@@ -89,14 +94,16 @@ class OCRProcessor:
                 
                 if response.text_annotations:
                     page_text = response.text_annotations[0].description
-                    all_text.append(f"\n--- Página {i+1} ---\n{page_text}")
+                    all_text.append(f"\n--- Página {page_num + 1} ---\n{page_text}")
                 
                 # Logging de progreso
-                if (i + 1) % 10 == 0:
-                    logger.info(f"OCR: {i+1}/{len(images)} páginas procesadas")
+                if (page_num + 1) % 10 == 0:
+                    logger.info(f"OCR: {page_num + 1}/{pages_to_process} páginas procesadas")
+            
+            pdf_document.close()
             
             extracted_text = "\n".join(all_text)
-            logger.info(f"OCR completado: {len(extracted_text)} caracteres extraídos")
+            logger.info(f"OCR completado: {len(extracted_text)} caracteres extraídos de {pages_to_process} páginas")
             
             return extracted_text
             
