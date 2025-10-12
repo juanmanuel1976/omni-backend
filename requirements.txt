@@ -12,6 +12,6 @@ faiss-cpu
 numpy
 torch
 google-cloud-vision==3.7.0
-pymupdf==1.25.7
+PyMuPDF==1.24.0
 
 
