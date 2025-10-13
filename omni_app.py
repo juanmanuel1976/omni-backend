@@ -7,6 +7,8 @@ import os
 import json
 import io
 import pypdf
+import logging
+import sys
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +19,15 @@ from rag_manager import rag_manager
 import logging
 from datetime import datetime
 from ocr_processor import ocr_processor
+
+# CONFIGURACIÓN DE LOGGING DETALLADO
+logging.basicConfig(
+    level=logging.ERROR,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
+)
+
+logger = logging.getLogger(__name__)
 
 # --- CONFIGURACIÓN DE CLAVES DE API (DESDE EL ENTORNO) --
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
@@ -72,35 +83,45 @@ async def get_text_from_files(files: List[UploadFile]) -> str:
     text = ""
     
     for file in files:
-        logger.info(f"Procesando archivo: {file.filename}")
-        file_content = await file.read()
-        
-        if file.content_type == 'application/pdf':
-            try:
-                # PASO 1: Detectar si es escaneado
-                is_scanned = ocr_processor.is_pdf_scanned(file_content)
-                
-                if is_scanned:
-                    # PASO 2: Usar OCR si es escaneado
-                    logger.info(f"PDF escaneado detectado, usando OCR...")
-                    ocr_text = await ocr_processor.extract_text_with_ocr(
-                        file_content, 
-                        max_pages=100  # Límite de costo: 100 páginas por archivo
-                    )
-                    text += ocr_text
-                else:
-                    # PASO 3: Usar pypdf si NO es escaneado
-                    logger.info(f"PDF normal, usando extracción estándar...")
-                    pdf_reader = pypdf.PdfReader(io.BytesIO(file_content))
-                    for page in pdf_reader.pages:
-                        page_text = page.extract_text() or ""
-                        text += page_text
+        try:
+            logger.info(f"Procesando archivo: {file.filename}")
+            file_content = await file.read()
+            
+            if file.content_type == 'application/pdf':
+                try:
+                    # PASO 1: Detectar si es escaneado
+                    logger.info(f"Detectando si PDF está escaneado...")
+                    is_scanned = ocr_processor.is_pdf_scanned(file_content)
+                    logger.info(f"PDF escaneado: {is_scanned}")
+                    
+                    if is_scanned:
+                        # PASO 2: Usar OCR si es escaneado
+                        logger.info(f"PDF escaneado detectado, usando OCR...")
+                        ocr_text = await ocr_processor.extract_text_with_ocr(
+                            file_content, 
+                            max_pages=100
+                        )
+                        text += ocr_text + "\n\n"
+                    else:
+                        # PASO 3: Usar pypdf si NO es escaneado
+                        logger.info(f"PDF normal, usando extracción estándar...")
+                        pdf_reader = pypdf.PdfReader(io.BytesIO(file_content))
+                        logger.info(f"PDF tiene {len(pdf_reader.pages)} páginas")
                         
-            except Exception as e:
-                logger.error(f"Error procesando PDF {file.filename}: {e}")
+                        for page in pdf_reader.pages:
+                            page_text = page.extract_text() or ""
+                            text += page_text
+                            
+                except Exception as pdf_error:
+                    logger.error(f"ERROR procesando PDF {file.filename}: {pdf_error}", exc_info=True)
+                    raise  # Re-lanzar para ver el traceback completo
+                    
+            elif file.content_type == 'text/plain':
+                text += file_content.decode('utf-8')
                 
-        elif file.content_type == 'text/plain':
-            text += file_content.decode('utf-8')
+        except Exception as file_error:
+            logger.error(f"ERROR general con archivo {file.filename}: {file_error}", exc_info=True)
+            raise  # Re-lanzar para que FastAPI muestre el error
     
     logger.info(f"Texto total extraído: {len(text)} caracteres")
     return text
@@ -532,6 +553,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
