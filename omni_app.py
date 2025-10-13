@@ -5,6 +5,7 @@ import asyncio
 import httpx
 import os
 import json
+import io
 import pypdf
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form
 from fastapi.responses import StreamingResponse
@@ -531,6 +532,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
