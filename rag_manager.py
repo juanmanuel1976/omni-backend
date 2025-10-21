@@ -13,6 +13,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# NUEVO: Límite de chunks basado en evidencia empírica
+MAX_CHUNKS = 500  # 308 chunks probados OK + 62% margen de seguridad
+
 class RAGManager:
     """
     Sistema RAG real optimizado para máximo aprovechamiento del plan Render Standard.
@@ -138,6 +141,11 @@ class RAGManager:
             if not self.chunks:
                 logger.warning("No se pudieron generar chunks del documento")
                 return False
+            
+            # NUEVO: Limitar chunks para evitar OOM
+            if len(self.chunks) > MAX_CHUNKS:
+                logger.warning(f"Documento muy grande: {len(self.chunks)} chunks. Limitando a {MAX_CHUNKS}")
+                self.chunks = self.chunks[:MAX_CHUNKS]
             
             # Generar embeddings
             logger.info(f"Generando embeddings para {len(self.chunks)} chunks...")
