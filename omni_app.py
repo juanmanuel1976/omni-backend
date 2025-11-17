@@ -242,7 +242,7 @@ async def stream_claude(prompt):
         return
     try:
         client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY, timeout=360.0)
-        async with client.messages.stream(model="claude-3-haiku-20240307", max_tokens=10000, messages=[{"role": "user", "content": prompt}]) as stream:
+        async with client.messages.stream(model="claude-3-haiku-20240307", max_tokens=4069, messages=[{"role": "user", "content": prompt}]) as stream:
             async for text in stream.text_stream:
                 yield {"model": "claude", "chunk": text}
     except Exception as e:
@@ -268,7 +268,7 @@ async def call_ai_model_no_stream(model_name: str, prompt: str):
             elif model_name == "claude":
                 if not ANTHROPIC_API_KEY: return "Error: ANTHROPIC_API_KEY no configurada."
                 client_anthropic = AsyncAnthropic(api_key=ANTHROPIC_API_KEY, timeout=360.0)
-                msg = await client_anthropic.messages.create(model="claude-3-haiku-20240307", max_tokens=10000, messages=[{"role": "user", "content": prompt}])
+                msg = await client_anthropic.messages.create(model="claude-3-haiku-20240307", max_tokens=4069, messages=[{"role": "user", "content": prompt}])
                 return msg.content[0].text
     except Exception as e:
         return f"Error en {model_name}: {e}"
@@ -553,6 +553,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
