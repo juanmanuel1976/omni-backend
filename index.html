@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crisalia | Inteligencia Sintetizada para Decisiones Críticas</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%230f3b5c%22></rect><text y=%22.9em%22 x=%22.25em%22 font-size=%2280%22 fill=%22%23ffffff%22>C</text></svg>">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0A0910;
+        }
+        .hero-gradient {
+            background-image: radial-gradient(circle at 20% 30%, rgba(124, 58, 237, 0.15), transparent 40%),
+                              radial-gradient(circle at 80% 70%, rgba(79, 70, 229, 0.15), transparent 40%);
+        }
+        .card-glow {
+            position: relative;
+            background-color: #111827;
+            border-radius: 1rem;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .card-glow:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 0 30px rgba(124, 58, 237, 0.3);
+        }
+        .fade-in-up {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+        }
+        .is-visible .fade-in-up {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .source-gemini { background-color: rgba(66, 133, 244, 0.15); border-left: 2px solid #4285F4; }
+        .source-deepseek { background-color: rgba(52, 168, 83, 0.15); border-left: 2px solid #34A853; }
+        .source-claude { background-color: rgba(212, 129, 5, 0.15); border-left: 2px solid #D48105; }
+    </style>
+</head>
+<body class="text-gray-300">
+
+    <header class="sticky top-0 z-50 bg-black/30 backdrop-blur-lg border-b border-gray-800">
+        <div class="container mx-auto max-w-7xl px-4">
+            <nav class="flex justify-between items-center py-4">
+                <a href="#" class="text-2xl font-bold tracking-tighter text-white">
+                    Crisalia<span class="text-violet-500">.</span>
+                </a>
+                <div class="hidden md:flex items-center space-x-8 text-sm font-medium text-gray-400">
+                    <a href="#diferencia" class="hover:text-white transition-colors">La Diferencia</a>
+                    <a href="#features" class="hover:text-white transition-colors">Características</a>
+                    <a href="#casos-de-uso" class="hover:text-white transition-colors">Casos de Uso</a>
+                </div>
+                <a href="app.html" class="bg-violet-600 text-white font-semibold py-2 px-5 rounded-lg text-sm hover:bg-violet-700 transition-all">
+                    Ir a la Herramienta
+                </a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container mx-auto max-w-7xl px-4">
+
+        <section class="text-center py-24 md:py-32 hero-gradient">
+            <h1 class="text-5xl md:text-7xl font-extrabold tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-white to-gray-400">
+                De-risk Your Decisions.
+            </h1>
+            <p class="mt-6 text-lg md:text-xl text-gray-400 max-w-3xl mx-auto">
+                Crisalia no te da una respuesta, te entrega una estrategia. Orquestamos un panel de IAs expertas para generar insights robustos, transparentes y libres del sesgo de un modelo único.
+            </p>
+            <div class="mt-10 flex justify-center gap-4">
+                <a href="app.html" class="bg-violet-600 text-white font-semibold py-3 px-8 rounded-lg hover:bg-violet-700 transition-all">
+                    Probar la Herramienta
+                </a>
+                <a href="#diferencia" class="bg-gray-800 text-white font-semibold py-3 px-8 rounded-lg hover:bg-gray-700 transition-all">
+                    Descubrir Cómo
+                </a>
+            </div>
+        </section>
+
+        <section id="diferencia" class="py-24" x-data="{ inView: false }" x-intersect="inView = true" :class="inView ? 'is-visible' : ''">
+            <div class="text-center mb-16 fade-in-up">
+                <h2 class="text-sm font-bold uppercase tracking-widest text-violet-400">EL MÉTODO</h2>
+                <p class="mt-4 text-4xl md:text-5xl font-bold tracking-tight text-white">De una Voz a una Sinfonía</p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
+                <div class="card-glow p-8 flex flex-col fade-in-up" style="transition-delay: 100ms;">
+                    <h3 class="text-xl font-bold text-white text-center">IA Tradicional: La Caja Negra</h3>
+                    <p class="text-gray-400 text-center text-sm mt-2">Una única perspectiva, un riesgo inherente.</p>
+                    <div class="flex-grow flex flex-col justify-center items-center mt-6 space-y-4">
+                        <div class="font-medium text-gray-300">Tu Query</div>
+                        <svg class="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
+                        <div class="p-4 bg-gray-900 rounded-lg shadow-inner w-full text-center">
+                            <span class="font-bold text-white">Modelo Único</span>
+                        </div>
+                        <svg class="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
+                        <div class="p-4 bg-red-900/50 border border-red-500/50 rounded-lg w-full text-center">
+                            <div class="font-bold text-red-300">Una Respuesta</div>
+                            <p class="text-xs text-red-400">Opaca, potencialmente sesgada.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-glow p-8 flex flex-col fade-in-up" style="transition-delay: 200ms;">
+                    <h3 class="text-xl font-bold text-white text-center">Crisalia: El Debate Dialéctico</h3>
+                    <p class="text-gray-400 text-center text-sm mt-2">Múltiples expertos para un insight superior.</p>
+                    <div class="flex-grow flex flex-col justify-center items-center mt-6 space-y-4">
+                        <div class="font-medium text-gray-300">Tu Query</div>
+                        <svg class="w-8 h-8 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
+                        <div class="grid grid-cols-3 gap-2 w-full">
+                            <div class="p-2 bg-gray-900 rounded-lg shadow-inner text-center"><span class="font-bold text-sm text-white">Gemini</span></div>
+                            <div class="p-2 bg-gray-900 rounded-lg shadow-inner text-center"><span class="font-bold text-sm text-white">Deepseek</span></div>
+                            <div class="p-2 bg-gray-900 rounded-lg shadow-inner text-center"><span class="font-bold text-sm text-white">Claude</span></div>
+                        </div>
+                        <div class="text-2xl font-bold text-violet-400 tracking-tighter">⟨ Debate Sintético ⟩</div>
+                        <div class="p-4 bg-violet-900/50 border border-violet-500/50 rounded-lg w-full text-center">
+                            <div class="font-bold text-violet-300">Insight Estratégico</div>
+                            <p class="text-xs text-violet-400">Validado, transparente y accionable.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="features" class="py-24" x-data="{ inView: false }" x-intersect="inView = true" :class="inView ? 'is-visible' : ''">
+            <div class="text-center mb-16 fade-in-up">
+                <h2 class="text-sm font-bold uppercase tracking-widest text-violet-400">PLATAFORMA</h2>
+                <p class="mt-4 text-4xl md:text-5xl font-bold tracking-tight text-white">Un Toolkit para la Inteligencia Aumentada</p>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="card-glow lg:col-span-2 p-8 fade-in-up" style="transition-delay: 100ms;">
+                    <div class="flex items-center gap-4 mb-4">
+                        <svg class="w-8 h-8 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        <h3 class="text-xl font-bold text-white">Métrica de Consenso</h3>
+                    </div>
+                    <p class="text-gray-400 mb-6">Cuantificamos la certeza. Un bajo consenso indica temas complejos que requieren tu dirección. Un alto consenso valida conclusiones factuales y robustas.</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-8 items-center">
+                        <div>
+                            <div class="w-full h-48 mx-auto"><canvas id="highConsensusChart"></canvas></div>
+                            <h4 class="text-center font-semibold text-gray-300 mt-4">Alto Consenso (92%)</h4>
+                        </div>
+                        <div>
+                            <div class="w-full h-48 mx-auto"><canvas id="lowConsensusChart"></canvas></div>
+                            <h4 class="text-center font-semibold text-gray-300 mt-4">Bajo Consenso (18%)</h4>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-glow p-8 fade-in-up" style="transition-delay: 200ms;">
+                     <div class="flex items-center gap-4 mb-4">
+                        <svg class="w-8 h-8 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        <h3 class="text-xl font-bold text-white">Análisis de Documentos</h3>
+                    </div>
+                    <p class="text-gray-400">Procesa informes extensos, papers académicos o contratos. Arroja tus `.pdf`, `.txt`, y `.md` y deja que Crisalia extraiga la inteligencia.</p>
+                    <div class="mt-8 flex justify-around items-end h-full text-6xl text-gray-600">
+                        <span>📄</span>
+                        <span>📑</span>
+                        <span>🧾</span>
+                    </div>
+                </div>
+
+                <div class="card-glow lg:col-span-3 p-8 fade-in-up" style="transition-delay: 300ms;">
+                     <div class="flex items-center gap-4 mb-4">
+                        <svg class="w-8 h-8 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                        <h3 class="text-xl font-bold text-white">Trazabilidad del Razonamiento</h3>
+                    </div>
+                    <p class="text-gray-400 mb-6">Auditabilidad total. La síntesis final utiliza un código de colores para trazar cada idea hasta su modelo de origen, eliminando la "caja negra" del análisis.</p>
+                    <div class="p-6 bg-black/50 rounded-lg border border-gray-700 font-mono text-sm">
+                        <p class="text-gray-300 leading-relaxed">
+                            <span class="px-2 py-1 rounded source-gemini">El análisis de mercado sugiere una oportunidad de entrada en el sector de energía renovable, basado en proyecciones de crecimiento del 25% anual.</span>
+                            <span class="px-2 py-1 rounded source-deepseek">Sin embargo, la barrera regulatoria en Europa podría retrasar la rentabilidad en 2-3 años, un riesgo clave a mitigar.</span>
+                            <span>La síntesis recomienda una estrategia de adquisición focalizada en startups tecnológicas con IP validada para acelerar la entrada.</span>
+                        </p>
+                         <div class="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-xs">
+                            <span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2" style="background-color: #4285F4;"></span>Aporte: Gemini</span>
+                            <span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2" style="background-color: #34A853;"></span>Aporte: Deepseek</span>
+                            <span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2" style="background-color: #D48105;"></span>Aporte: Claude</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="casos-de-uso" class="py-24" x-data="{ inView: false }" x-intersect="inView = true" :class="inView ? 'is-visible' : ''">
+             <div class="text-center mb-16 fade-in-up">
+                <h2 class="text-sm font-bold uppercase tracking-widest text-violet-400">APLICACIONES</h2>
+                <p class="mt-4 text-4xl md:text-5xl font-bold tracking-tight text-white">Para Decisiones de Alto Impacto</p>
+                <p class="mt-4 text-lg text-gray-400 max-w-2xl mx-auto">Crisalia está diseñado para profesionales que no pueden permitirse un análisis superficial.</p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                <div class="card-glow p-6 text-center fade-in-up" style="transition-delay: 100ms;">
+                    <h3 class="text-lg font-bold text-white">Análisis Estratégico</h3>
+                    <p class="mt-2 text-sm text-gray-400">Evalúa informes de mercado, analiza competidores y sintetiza tendencias para definir la dirección de tu negocio.</p>
+                </div>
+                <div class="card-glow p-6 text-center fade-in-up" style="transition-delay: 200ms;">
+                    <h3 class="text-lg font-bold text-white">Investigación y Desarrollo (I+D)</h3>
+                    <p class="mt-2 text-sm text-gray-400">Procesa y resume literatura científica compleja, identifica brechas en el conocimiento y acelera la innovación.</p>
+                </div>
+                 <div class="card-glow p-6 text-center fade-in-up" style="transition-delay: 300ms;">
+                    <h3 class="text-lg font-bold text-white">Due Diligence Financiero y Legal</h3>
+                    <p class="mt-2 text-sm text-gray-400">Analiza contratos, detecta riesgos en documentos extensos y genera resúmenes ejecutivos en minutos, no días.</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+    
+    <footer class="border-t border-gray-800">
+         <div class="container mx-auto max-w-7xl px-4 py-8">
+             <div class="flex flex-col md:flex-row justify-between items-center">
+                 <p class="text-sm text-gray-500">&copy; 2025 Crisalia. Todos los derechos reservados.</p>
+                 <div class="flex space-x-6 mt-4 md:mt-0">
+                     <a href="#" class="text-gray-500 hover:text-white transition-colors">Twitter</a>
+                     <a href="#" class="text-gray-500 hover:text-white transition-colors">LinkedIn</a>
+                     <a href="#" class="text-gray-500 hover:text-white transition-colors">Contacto</a>
+                 </div>
+             </div>
+         </div>
+    </footer>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('is-visible');
+                    }
+                });
+            }, { threshold: 0.1 });
+
+            document.querySelectorAll('section, .card-glow').forEach(el => {
+                observer.observe(el);
+            });
+
+            const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '75%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#1F2937',
+                        titleColor: '#E5E7EB',
+                        bodyColor: '#D1D5DB',
+                        padding: 10,
+                        cornerRadius: 6,
+                    }
+                }
+            };
+
+            const highConsensusCtx = document.getElementById('highConsensusChart');
+            if(highConsensusCtx) {
+                new Chart(highConsensusCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Acuerdo', 'Desacuerdo'],
+                        datasets: [{
+                            data: [92, 8],
+                            backgroundColor: ['#7C3AED', 'rgba(124, 58, 237, 0.2)'],
+                            borderColor: '#111827',
+                            borderWidth: 4
+                        }]
+                    },
+                    options: chartOptions
+                });
+            }
+
+            const lowConsensusCtx = document.getElementById('lowConsensusChart');
+            if(lowConsensusCtx) {
+                new Chart(lowConsensusCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Perspectiva A', 'Perspectiva B', 'Acuerdo'],
+                        datasets: [{
+                            data: [52, 30, 18],
+                            backgroundColor: ['#a21caf', '#be185d', 'rgba(124, 58, 237, 0.2)'],
+                            borderColor: '#111827',
+                            borderWidth: 4
+                        }]
+                    },
+                    options: chartOptions
+                });
+            }
+        });
+    </script>
+
+</body>
+</html>

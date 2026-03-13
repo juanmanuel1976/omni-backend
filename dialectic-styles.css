@@ -1,0 +1,372 @@
+/* ==============================================================================
+   DIALECTIC STYLES - Estilos para funcionalidades dialécticas v6.0
+   ============================================================================== */
+
+/* Configuración dialéctica */
+.dialectic-config {
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(79, 70, 229, 0.1));
+    border: 1px solid rgba(124, 58, 237, 0.3);
+    transition: all 0.3s ease;
+}
+
+.dialectic-config:hover {
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.15), rgba(79, 70, 229, 0.15));
+    border-color: rgba(124, 58, 237, 0.5);
+}
+
+/* Selector de confianza */
+.confidence-selector input:checked + label {
+    background-color: #7C3AED;
+    color: #ffffff;
+    border-color: #7C3AED;
+    font-weight: 500;
+    transform: scale(1.02);
+}
+
+.confidence-selector label {
+    transition: all 0.3s ease;
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+
+.confidence-selector label:hover {
+    background-color: rgba(124, 58, 237, 0.1);
+    border-color: rgba(124, 58, 237, 0.3);
+}
+
+/* Respuestas iniciales */
+.initial-responses-section {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.1));
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    animation: slideInFromTop 0.5s ease-out;
+}
+
+@keyframes slideInFromTop {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Items de disidencia */
+.dissidence-item {
+    transition: all 0.3s ease;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+    overflow: hidden;
+}
+
+.dissidence-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #fbbf24, #f59e0b);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.dissidence-item:hover {
+    background-color: rgba(124, 58, 237, 0.05);
+    border-color: rgba(124, 58, 237, 0.3);
+    transform: translateY(-2px);
+}
+
+.dissidence-item:hover::before {
+    opacity: 1;
+}
+
+/* Estados de disidencia */
+.dissidence-item.ring-2.ring-green-500 {
+    background-color: rgba(34, 197, 94, 0.1);
+    border-color: rgba(34, 197, 94, 0.5);
+}
+
+.dissidence-item.ring-2.ring-red-500 {
+    background-color: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.5);
+}
+
+.dissidence-item.opacity-60 {
+    background-color: rgba(75, 85, 99, 0.2);
+    border-color: rgba(75, 85, 99, 0.3);
+}
+
+/* Botones de acción de disidencia */
+.dissidence-action {
+    transition: all 0.2s ease;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.375rem;
+    font-weight: 500;
+    border: 1px solid transparent;
+}
+
+.dissidence-action:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.dissidence-action[data-action="include"]:hover {
+    background-color: rgba(34, 197, 94, 0.3) !important;
+    border-color: rgba(34, 197, 94, 0.5);
+}
+
+.dissidence-action[data-action="exclude"]:hover {
+    background-color: rgba(239, 68, 68, 0.3) !important;
+    border-color: rgba(239, 68, 68, 0.5);
+}
+
+.dissidence-action[data-action="ignore"]:hover {
+    background-color: rgba(75, 85, 99, 0.3) !important;
+    border-color: rgba(75, 85, 99, 0.5);
+}
+
+/* Prompts sugeridos */
+.suggested-prompt {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.1));
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+.suggested-prompt::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(34, 197, 94, 0.8), transparent);
+    transition: left 0.5s ease;
+}
+
+.suggested-prompt:hover {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.15));
+    border-color: rgba(34, 197, 94, 0.5);
+    transform: translateY(-2px);
+}
+
+.suggested-prompt:hover::before {
+    left: 0;
+}
+
+.suggested-prompt.ring-2.ring-violet-500 {
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.2), rgba(79, 70, 229, 0.2));
+    border-color: rgba(124, 58, 237, 0.7);
+}
+
+/* Botón de usar prompt */
+.use-prompt-btn {
+    transition: all 0.2s ease;
+    font-weight: 500;
+}
+
+.use-prompt-btn:hover {
+    background-color: rgba(124, 58, 237, 0.5) !important;
+    transform: scale(1.05);
+}
+
+/* Textarea de prompt personalizado */
+#custom-refinement-prompt {
+    transition: all 0.3s ease;
+    min-height: 80px;
+    resize: vertical;
+}
+
+#custom-refinement-prompt:focus {
+    background-color: rgba(17, 24, 39, 0.8);
+    border-color: rgba(124, 58, 237, 0.5);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+}
+
+/* Estilos para advertencia de consenso estancado */
+.consensus-stagnation-warning {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(217, 119, 6, 0.1));
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    animation: pulseWarning 2s infinite;
+}
+
+@keyframes pulseWarning {
+    0%, 100% { 
+        border-color: rgba(245, 158, 11, 0.3);
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(217, 119, 6, 0.1));
+    }
+    50% { 
+        border-color: rgba(245, 158, 11, 0.5);
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.15));
+    }
+}
+
+/* Botón de síntesis forzada */
+#force-synthesis-btn {
+    background: linear-gradient(135deg, #d97706, #f59e0b);
+    box-shadow: 0 2px 4px rgba(217, 119, 6, 0.3);
+    transition: all 0.3s ease;
+}
+
+#force-synthesis-btn:hover {
+    background: linear-gradient(135deg, #b45309, #d97706);
+    box-shadow: 0 4px 8px rgba(217, 119, 6, 0.4);
+    transform: translateY(-1px);
+}
+
+/* Responsive design para móviles */
+@media (max-width: 768px) {
+    .confidence-selector {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .dissidence-item .flex {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    
+    .dissidence-action {
+        font-size: 0.7rem;
+        padding: 0.2rem 0.4rem;
+    }
+    
+    .suggested-prompt {
+        padding: 1rem;
+    }
+    
+    .dialectic-config {
+        padding: 1rem;
+    }
+    
+    .use-prompt-btn {
+        font-size: 0.7rem;
+        padding: 0.4rem 0.8rem;
+    }
+}
+
+/* Animaciones específicas para disidencias */
+@keyframes dissidenceAppear {
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.dissidence-item {
+    animation: dissidenceAppear 0.3s ease-out;
+}
+
+.dissidence-item:nth-child(2) { animation-delay: 0.1s; }
+.dissidence-item:nth-child(3) { animation-delay: 0.2s; }
+.dissidence-item:nth-child(4) { animation-delay: 0.3s; }
+
+/* Estados de carga para prompts sugeridos */
+.suggested-prompts-loading {
+    animation: pulse 2s infinite;
+}
+
+/* Mejoras de accesibilidad */
+.dissidence-action:focus,
+.use-prompt-btn:focus {
+    outline: 2px solid rgba(124, 58, 237, 0.5);
+    outline-offset: 2px;
+}
+
+/* Iconos de estado para disidencias */
+.dissidence-item::after {
+    content: '';
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: rgba(75, 85, 99, 0.5);
+    transition: all 0.3s ease;
+}
+
+.dissidence-item.ring-2.ring-green-500::after {
+    background-color: rgba(34, 197, 94, 0.8);
+}
+
+.dissidence-item.ring-2.ring-red-500::after {
+    background-color: rgba(239, 68, 68, 0.8);
+}
+
+.dissidence-item.opacity-60::after {
+    background-color: rgba(75, 85, 99, 0.3);
+}
+
+/* Animaciones de consenso */
+@keyframes consensusImprovement {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.consensus-improved {
+    animation: consensusImprovement 0.6s ease-in-out;
+}
+
+/* Estilos para estado de síntesis forzada */
+.forced-synthesis-active {
+    border: 2px solid rgba(245, 158, 11, 0.8);
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(217, 119, 6, 0.1));
+}
+
+/* Mejoras visuales para el progreso del consenso */
+.consensus-progress-indicator {
+    position: relative;
+    overflow: hidden;
+}
+
+.consensus-progress-indicator::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(124, 58, 237, 0.3), transparent);
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+/* Estilos para indicadores de iteración */
+.iteration-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    background: rgba(124, 58, 237, 0.1);
+    border: 1px solid rgba(124, 58, 237, 0.3);
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: rgba(124, 58, 237, 0.9);
+}
+
+.iteration-indicator::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: rgba(124, 58, 237, 0.6);
+    animation: pulse 2s infinite;
+}
