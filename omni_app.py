@@ -549,14 +549,298 @@ async def startup_event():
     except Exception as e:
         print(f"Error inicializando RAG Manager: {e}")
         
+# ==============================================================================
+# NUEVOS ENDPOINTS - Agente de Mejora Continua v1.0
+# Agregar en omni_app.py ANTES del bloque if __name__ == "__main__"
+# ==============================================================================
+
+from datetime import datetime
+import json, os
+
+# --- MODELOS DE DATOS ---
+
+class ValidateChangeRequest(BaseModel):
+    """
+    Solicitud de validación dialéctica de un cambio de código.
+    El agente externo (Claude) envía el cambio y los 3 modelos de Crisalia debaten.
+    """
+    archivo: str                    # Ej: "dialectic-enhancements.js"
+    descripcion: str                # Qué hace el cambio en lenguaje natural
+    codigo_original: str            # Fragmento ANTES del cambio
+    codigo_propuesto: str           # Fragmento DESPUÉS del cambio
+    tipo: str = "code"              # "code" | "ux" | "benchmark"
+    contexto_adicional: str = ""    # Cualquier info extra relevante
+
+class ValidateChangeResponse(BaseModel):
+    aprobado: bool
+    consenso_score: int             # 0-100
+    veredicto: str                  # "APROBADO" | "APROBADO_CON_OBSERVACIONES" | "RECHAZADO"
+    debate: dict                    # Respuestas individuales de cada modelo
+    sintesis: str                   # Síntesis final del debate
+    riesgos: list                   # Lista de riesgos identificados
+    sugerencias: list               # Mejoras sugeridas
+    timestamp: str
+
+class AgentStepRequest(BaseModel):
+    """
+    Registro de un paso del agente con documentación automática.
+    """
+    paso_numero: int
+    titulo: str
+    descripcion: str
+    archivos_afectados: list = []
+    resultado: str = ""             # "pendiente" | "aplicado" | "revertido" | "validado"
+    validacion_id: str = ""         # ID de la validación dialéctica si existe
+
+class AgentStepResponse(BaseModel):
+    paso_id: str
+    timestamp: str
+    documentacion_actualizada: bool
+
+# --- ALMACENAMIENTO EN MEMORIA (reemplazable por Supabase en v2) ---
+_agent_log: list = []               # Historial de pasos del agente
+_validation_log: list = []         # Historial de validaciones
+
+# --- ENDPOINT 1: VALIDACIÓN DIALÉCTICA ---
+
+@app.post("/api/validate-change", response_model=ValidateChangeResponse)
+async def validate_change(request: ValidateChangeRequest):
+    """
+    El corazón del Agente Crisalia.
+    Recibe un cambio propuesto y lo somete al debate dialéctico interno.
+    Los 3 modelos analizan el cambio y producen un veredicto con consenso.
+    """
+    
+    # Construir prompt de validación según el tipo
+    tipo_label = {
+        "code": "corrección/optimización de código",
+        "ux": "mejora de interfaz de usuario",
+        "benchmark": "cambio en métricas de evaluación"
+    }.get(request.tipo, "cambio")
+
+    prompt_validacion = f"""Sos un experto en desarrollo de software analizando una propuesta de {tipo_label} para Crisalia.
+
+Crisalia es una plataforma multi-IA dialéctica para el sector jurídico-político argentino.
+Su diferencial es hacer debatir a Gemini, DeepSeek y Claude para producir síntesis superiores.
+El objetivo final es su monetización en el mercado legal argentino.
+
+ARCHIVO AFECTADO: {request.archivo}
+
+DESCRIPCIÓN DEL CAMBIO:
+{request.descripcion}
+
+CÓDIGO ORIGINAL:
+```
+{request.codigo_original}
+```
+
+CÓDIGO PROPUESTO:
+```
+{request.codigo_propuesto}
+```
+
+{f"CONTEXTO ADICIONAL: {request.contexto_adicional}" if request.contexto_adicional else ""}
+
+TU TAREA:
+1. Analizá si el cambio propuesto es correcto y seguro
+2. Identificá riesgos concretos (efectos secundarios, casos edge, dependencias rotas)
+3. Sugerí mejoras si las hay
+4. Evaluá el impacto en la monetización/usabilidad para clientes jurídicos
+
+Respondé de forma concisa y técnica. Máximo 4 oraciones."""
+
+    # Obtener respuestas iniciales de los 3 modelos en paralelo
+    initial_tasks = [
+        call_ai_model_no_stream('gemini', prompt_validacion),
+        call_ai_model_no_stream('deepseek', prompt_validacion),
+        call_ai_model_no_stream('claude', prompt_validacion)
+    ]
+    results = await asyncio.gather(*initial_tasks)
+    initial_responses = {
+        'gemini': results[0],
+        'deepseek': results[1],
+        'claude': results[2]
+    }
+
+    # Ronda de crítica cruzada (cada modelo ve las respuestas de los otros)
+    critique_tasks = []
+    models_order = ['gemini', 'deepseek', 'claude']
+    for model in models_order:
+        context = "\n\n".join([
+            f"**{m.title()} dijo:**\n{r}"
+            for m, r in initial_responses.items() if m != model
+        ])
+        critique_prompt = f"""{prompt_validacion}
+
+**Tu respuesta inicial fue:**
+{initial_responses[model]}
+
+**Los otros modelos dijeron:**
+{context}
+
+**Ahora:** ¿Coincidís con ellos? ¿Qué agregarías o corregirías? ¿Hay riesgos que no mencionaron?
+Sé específico. Si el cambio es seguro, decilo claramente. Si hay riesgo, nombrá el riesgo exacto."""
+        critique_tasks.append(call_ai_model_no_stream(model, critique_prompt))
+
+    critique_results = await asyncio.gather(*critique_tasks)
+    revised_responses = dict(zip(models_order, critique_results))
+
+    # Síntesis final con veredicto
+    synthesis_prompt = f"""Sos el árbitro final de una revisión de código dialéctica para Crisalia.
+
+CAMBIO PROPUESTO en {request.archivo}:
+{request.descripcion}
+
+DEBATE DE LOS 3 MODELOS:
+Gemini: {revised_responses['gemini']}
+DeepSeek: {revised_responses['deepseek']}
+Claude: {revised_responses['claude']}
+
+Producí un veredicto final en formato JSON válido:
+{{
+    "aprobado": true/false,
+    "consenso_score": 0-100,
+    "veredicto": "APROBADO" | "APROBADO_CON_OBSERVACIONES" | "RECHAZADO",
+    "sintesis": "2-3 oraciones explicando el veredicto",
+    "riesgos": ["riesgo1", "riesgo2"],
+    "sugerencias": ["sugerencia1", "sugerencia2"]
+}}
+
+Respondé SOLO con el JSON válido, sin texto adicional."""
+
+    raw_verdict = await call_ai_model_no_stream('gemini', synthesis_prompt)
+
+    # Parsear veredicto
+    try:
+        json_start = raw_verdict.find('{')
+        json_end = raw_verdict.rfind('}') + 1
+        verdict = json.loads(raw_verdict[json_start:json_end])
+    except Exception:
+        # Fallback si el JSON falla
+        verdict = {
+            "aprobado": False,
+            "consenso_score": 0,
+            "veredicto": "ERROR_PARSEO",
+            "sintesis": raw_verdict[:500],
+            "riesgos": ["Error al parsear el veredicto"],
+            "sugerencias": []
+        }
+
+    # Guardar en log interno
+    validation_entry = {
+        "id": f"val_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        "timestamp": datetime.now().isoformat(),
+        "archivo": request.archivo,
+        "tipo": request.tipo,
+        "descripcion": request.descripcion,
+        "veredicto": verdict.get("veredicto"),
+        "consenso_score": verdict.get("consenso_score", 0),
+        "debate": {
+            "inicial": initial_responses,
+            "revisado": revised_responses
+        }
+    }
+    _validation_log.append(validation_entry)
+
+    return ValidateChangeResponse(
+        aprobado=verdict.get("aprobado", False),
+        consenso_score=verdict.get("consenso_score", 0),
+        veredicto=verdict.get("veredicto", "ERROR"),
+        debate={"inicial": initial_responses, "revisado": revised_responses},
+        sintesis=verdict.get("sintesis", ""),
+        riesgos=verdict.get("riesgos", []),
+        sugerencias=verdict.get("sugerencias", []),
+        timestamp=validation_entry["timestamp"]
+    )
+
+
+# --- ENDPOINT 2: REGISTRO DE PASOS DEL AGENTE ---
+
+@app.post("/api/agent-step", response_model=AgentStepResponse)
+async def register_agent_step(request: AgentStepRequest):
+    """
+    Registra cada paso del agente con documentación automática.
+    Construye un log acumulativo que sirve como documentación del proceso.
+    """
+    paso_id = f"step_{request.paso_numero:03d}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    timestamp = datetime.now().isoformat()
+
+    step_entry = {
+        "paso_id": paso_id,
+        "paso_numero": request.paso_numero,
+        "titulo": request.titulo,
+        "descripcion": request.descripcion,
+        "archivos_afectados": request.archivos_afectados,
+        "resultado": request.resultado,
+        "validacion_id": request.validacion_id,
+        "timestamp": timestamp
+    }
+    _agent_log.append(step_entry)
+
+    return AgentStepResponse(
+        paso_id=paso_id,
+        timestamp=timestamp,
+        documentacion_actualizada=True
+    )
+
+
+# --- ENDPOINT 3: DOCUMENTACIÓN ACUMULADA ---
+
+@app.get("/api/agent-docs")
+async def get_agent_docs():
+    """
+    Devuelve la documentación completa del agente:
+    - Historial de pasos aplicados
+    - Historial de validaciones dialécticas
+    - Estadísticas del proceso
+    """
+    total_validaciones = len(_validation_log)
+    aprobadas = sum(1 for v in _validation_log if v.get("veredicto") == "APROBADO")
+    con_obs = sum(1 for v in _validation_log if v.get("veredicto") == "APROBADO_CON_OBSERVACIONES")
+    rechazadas = sum(1 for v in _validation_log if v.get("veredicto") == "RECHAZADO")
+
+    return {
+        "version": "1.0",
+        "generado": datetime.now().isoformat(),
+        "estadisticas": {
+            "total_pasos": len(_agent_log),
+            "total_validaciones": total_validaciones,
+            "aprobadas": aprobadas,
+            "aprobadas_con_observaciones": con_obs,
+            "rechazadas": rechazadas,
+            "tasa_aprobacion": round((aprobadas + con_obs) / total_validaciones * 100, 1) if total_validaciones > 0 else 0
+        },
+        "pasos": _agent_log,
+        "validaciones": [
+            {
+                "id": v["id"],
+                "timestamp": v["timestamp"],
+                "archivo": v["archivo"],
+                "descripcion": v["descripcion"],
+                "veredicto": v["veredicto"],
+                "consenso_score": v["consenso_score"]
+            }
+            for v in _validation_log
+        ]
+    }
+
+
+# --- ENDPOINT 4: HEALTH EXTENDIDO ---
+
+@app.get("/api/agent-status")
+async def get_agent_status():
+    """Estado del Agente de Mejora Continua."""
+    return {
+        "agente_activo": True,
+        "version_agente": "1.0",
+        "pasos_registrados": len(_agent_log),
+        "validaciones_realizadas": len(_validation_log),
+        "ultimo_paso": _agent_log[-1]["titulo"] if _agent_log else "ninguno",
+        "ultima_validacion": _validation_log[-1]["veredicto"] if _validation_log else "ninguna"
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
-
-
-
-
-
-
-
