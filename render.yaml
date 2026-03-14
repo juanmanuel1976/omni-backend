@@ -1,7 +1,1 @@
-services:
-  - type: web
-    name: omni-backend-dev
-    env: python
-    pythonVersion: "3.11.9"
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn omni_app:app -w 1 -k uvicorn.workers.UvicornWorker
+
