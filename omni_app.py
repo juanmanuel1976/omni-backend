@@ -29,6 +29,8 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+MODEL_TIMEOUT_VALIDATION = 55.0  # max 7 llamadas x 55s = 385s < 600s limite Render
+
 # --- CONFIGURACIÓN DE CLAVES DE API (DESDE EL ENTORNO) --
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
@@ -248,9 +250,9 @@ async def stream_claude(prompt):
     except Exception as e:
         yield {"model": "claude", "chunk": f"Error: {e}"}
 
-async def call_ai_model_no_stream(model_name: str, prompt: str):
+async def call_ai_model_no_stream(model_name: str, prompt: str, timeout: float = 360.0):
     try:
-        async with httpx.AsyncClient(timeout=360.0) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             if model_name == "gemini":
                 if not GOOGLE_API_KEY: return "Error: GOOGLE_API_KEY no configurada."
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GOOGLE_API_KEY}"
@@ -554,9 +556,6 @@ async def startup_event():
 # Agregar en omni_app.py ANTES del bloque if __name__ == "__main__"
 # ==============================================================================
 
-from datetime import datetime
-import json, os
-
 # --- MODELOS DE DATOS ---
 
 class ValidateChangeRequest(BaseModel):
@@ -575,7 +574,7 @@ class ValidateChangeResponse(BaseModel):
     aprobado: bool
     consenso_score: int             # 0-100
     veredicto: str                  # "APROBADO" | "APROBADO_CON_OBSERVACIONES" | "RECHAZADO"
-    debate: dict                    # Respuestas individuales de cada modelo
+    debate: Dict[str, Any]          # Respuestas individuales de cada modelo
     sintesis: str                   # Síntesis final del debate
     riesgos: list                   # Lista de riesgos identificados
     sugerencias: list               # Mejoras sugeridas
@@ -597,9 +596,41 @@ class AgentStepResponse(BaseModel):
     timestamp: str
     documentacion_actualizada: bool
 
-# --- ALMACENAMIENTO EN MEMORIA (reemplazable por Supabase en v2) ---
-_agent_log: list = []               # Historial de pasos del agente
-_validation_log: list = []         # Historial de validaciones
+# --- PERSISTENCIA SQLite (v1.0 - reemplazable por Supabase en v2) ---
+import sqlite3
+from contextlib import contextmanager
+
+AGENT_DB_PATH = 'crisalia_agent.db'
+
+@contextmanager
+def get_agent_db():
+    conn = sqlite3.connect(AGENT_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
+
+def init_agent_db():
+    with get_agent_db() as conn:
+        conn.execute(
+            'CREATE TABLE IF NOT EXISTS agent_steps '
+            '(paso_id TEXT PRIMARY KEY, paso_numero INTEGER, titulo TEXT, '
+            'descripcion TEXT, archivos_afectados TEXT, resultado TEXT, '
+            'validacion_id TEXT, timestamp TEXT)'
+        )
+        conn.execute(
+            'CREATE TABLE IF NOT EXISTS validation_logs '
+            '(id TEXT PRIMARY KEY, timestamp TEXT, archivo TEXT, tipo TEXT, '
+            'descripcion TEXT, veredicto TEXT, consenso_score INTEGER, debate TEXT)'
+        )
+
+init_agent_db()
+
+# Cache RAM de sesion (SQLite es fuente de verdad)
+_agent_log: list = []
+_validation_log: list = []
 
 # --- ENDPOINT 1: VALIDACIÓN DIALÉCTICA ---
 
@@ -651,9 +682,9 @@ Respondé de forma concisa y técnica. Máximo 4 oraciones."""
 
     # Obtener respuestas iniciales de los 3 modelos en paralelo
     initial_tasks = [
-        call_ai_model_no_stream('gemini', prompt_validacion),
-        call_ai_model_no_stream('deepseek', prompt_validacion),
-        call_ai_model_no_stream('claude', prompt_validacion)
+        call_ai_model_no_stream('gemini', prompt_validacion, timeout=MODEL_TIMEOUT_VALIDATION),
+        call_ai_model_no_stream('deepseek', prompt_validacion, timeout=MODEL_TIMEOUT_VALIDATION),
+        call_ai_model_no_stream('claude', prompt_validacion, timeout=MODEL_TIMEOUT_VALIDATION)
     ]
     results = await asyncio.gather(*initial_tasks)
     initial_responses = {
@@ -680,7 +711,7 @@ Respondé de forma concisa y técnica. Máximo 4 oraciones."""
 
 **Ahora:** ¿Coincidís con ellos? ¿Qué agregarías o corregirías? ¿Hay riesgos que no mencionaron?
 Sé específico. Si el cambio es seguro, decilo claramente. Si hay riesgo, nombrá el riesgo exacto."""
-        critique_tasks.append(call_ai_model_no_stream(model, critique_prompt))
+        critique_tasks.append(call_ai_model_no_stream(model, critique_prompt, timeout=MODEL_TIMEOUT_VALIDATION))
 
     critique_results = await asyncio.gather(*critique_tasks)
     revised_responses = dict(zip(models_order, critique_results))
@@ -708,7 +739,7 @@ Producí un veredicto final en formato JSON válido:
 
 Respondé SOLO con el JSON válido, sin texto adicional."""
 
-    raw_verdict = await call_ai_model_no_stream('gemini', synthesis_prompt)
+    raw_verdict = await call_ai_model_no_stream('gemini', synthesis_prompt, timeout=MODEL_TIMEOUT_VALIDATION)
 
     # Parsear veredicto
     try:
