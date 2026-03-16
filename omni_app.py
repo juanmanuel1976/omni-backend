@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException, File, UploadFile, Form
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Any
 from anthropic import AsyncAnthropic
 from rag_manager import rag_manager
 import logging
