@@ -4,7 +4,6 @@
 import asyncio
 import numpy as np
 import faiss
-from sentence_transformers import SentenceTransformer
 from typing import List, Dict, Tuple
 import pickle
 import tempfile
@@ -38,24 +37,18 @@ class RAGManager:
         self.chunk_metadata = []
         self.is_initialized = False
         
-    async def initialize(self):
-        """Inicialización asíncrona del modelo de embeddings."""
-        if self.is_initialized:
-            return
+    async def _load_model_if_needed(self):
+        """Lazy loading mínimo: solo se carga si alguien procesa un documento."""
+        if self.model is None:
+            import torch
+            from sentence_transformers import SentenceTransformer
             
-        try:
-            logger.info(f"Inicializando modelo {self.model_name}...")
-            # Inicializar en hilo separado para no bloquear FastAPI
-            loop = asyncio.get_event_loop()
-            self.model = await loop.run_in_executor(
-                None, 
-                lambda: SentenceTransformer(self.model_name)
-            )
+            logger.info(f"Cargando modelo {self.model_name} en memoria CPU...")
+            with torch.inference_mode():
+                # Forzamos CPU para que no intente buscar tarjetas gráficas
+                self.model = SentenceTransformer(self.model_name, device='cpu')
             self.is_initialized = True
-            logger.info("RAG Manager inicializado correctamente")
-        except Exception as e:
-            logger.error(f"Error inicializando RAG Manager: {e}")
-            raise
+        return self.model
     
     def smart_text_split(self, text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
         """
@@ -118,14 +111,13 @@ class RAGManager:
         return overlapped_chunks
     
     async def create_embeddings(self, texts: List[str]) -> np.ndarray:
-        """Crear embeddings de forma asíncrona."""
-        if not self.is_initialized:
-            await self.initialize()
+        """Crear embeddings de forma asíncrona cargando el modelo bajo demanda."""
+        model = await self._load_model_if_needed()
         
         loop = asyncio.get_event_loop()
         embeddings = await loop.run_in_executor(
             None,
-            lambda: self.model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
+            lambda: model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
         )
         return embeddings
     
@@ -260,7 +252,8 @@ class RAGManager:
             "model_name": self.model_name,
             "total_chunks": len(self.chunks),
             "index_size": self.index.ntotal if self.index else 0,
-            "embedding_dimension": self.model.get_sentence_embedding_dimension() if self.model else 0
+            # Evitamos llamar a self.model si aún no se inicializó para no forzar la carga
+            "embedding_dimension": self.model.get_sentence_embedding_dimension() if self.model else "Pendiente de carga"
         }
     
     def clear_index(self):
