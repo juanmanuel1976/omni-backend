@@ -13,3 +13,4 @@ numpy==1.24.3
 torch==2.2.0+cpu
 google-cloud-vision==3.7.0
 PyMuPDF==1.24.0
+pandas
