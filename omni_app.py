@@ -543,13 +543,7 @@ async def get_rag_stats():
 
 @app.on_event("startup")
 async def startup_event():
-    """Inicialización optimizada del RAG Manager al startup."""
-    try:
-        print("Inicializando RAG Manager en startup...")
-        await rag_manager.initialize()
-        print("RAG Manager listo para análisis de documentos")
-    except Exception as e:
-        print(f"Error inicializando RAG Manager: {e}")
+    print("Crisalia backend dev iniciado — RAG se inicializa al primer uso")
         
 # ==============================================================================
 # NUEVOS ENDPOINTS - Agente de Mejora Continua v1.0
