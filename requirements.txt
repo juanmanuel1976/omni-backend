@@ -13,9 +13,4 @@ numpy
 torch
 google-cloud-vision==3.7.0
 PyMuPDF==1.24.0
-
-
-
-
-
-
+protobuf>=3.20.2,<4.0.0
