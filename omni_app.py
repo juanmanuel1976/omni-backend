@@ -1,5 +1,5 @@
 # ==============================================================================
-# OMNIQUERY - SERVIDOR FUNCIONAL v6.2.2 (FIX STARTUP RAG)
+# OMNIQUERY - SERVIDOR FUNCIONAL v6.2.1 (VERSIÓN COMPLETA Y VERIFICADA)
 # ==============================================================================
 import asyncio
 import httpx
@@ -127,7 +127,6 @@ async def get_text_from_files(files: List[UploadFile]) -> str:
     
     logger.info(f"Texto total extraído: {len(text)} caracteres")
     return text
-
 # --- LÓGICA DE PROMPTS ---
 def build_contextual_prompt(user_prompt, history, mode, isDocument=False):
     history_context = ""
@@ -523,19 +522,16 @@ async def fact_check_endpoint(request: FactCheckRequest):
 # --- RUTAS DE SALUD Y RAÍZ ---
 @app.get("/")
 async def root():
-    return {"message": "Crisalia API v6.2.2 - Fix Startup RAG"}
+    return {"message": "Crisalia API v6.2.1 - Verificado y Completo"}
 
 @app.get("/health")
 async def health_check():
     """Endpoint de salud para monitoreo"""
-    import sys
     return {
         "status": "healthy",
-        "version": "6.2.2",
-        "python_version": sys.version,
+        "version": "6.2.1",
         "features": ["dialectic_enhancements", "user_directed_refinement", "rag_pipeline"]
     }
-
 @app.get("/api/rag-stats")
 async def get_rag_stats():
     """Endpoint para monitorear el estado del RAG Manager."""
@@ -545,20 +541,19 @@ async def get_rag_stats():
         "memory_usage": "optimized_for_standard_plan"
     }
 
-# ==============================================================================
-# FIX CRÍTICO v6.2.2: startup_event NO inicializa RAG
-# El RAG se inicializa on-demand al primer uso (en /api/rag-analysis)
-# Motivo: rag_manager.initialize() descarga ~400MB ANTES de que uvicorn
-# abra el puerto, causando "No open ports detected" en Render.
-# ==============================================================================
 @app.on_event("startup")
 async def startup_event():
-    """RAG se inicializa on-demand al primer uso."""
-    print("Crisalia backend v6.2.2 iniciado — RAG se inicializa al primer uso")
-
-
+    """Inicialización optimizada del RAG Manager al startup."""
+    try:
+        print("Inicializando RAG Manager en startup...")
+        await rag_manager.initialize()
+        print("RAG Manager listo para análisis de documentos")
+    except Exception as e:
+        print(f"Error inicializando RAG Manager: {e}")
+        
 # ==============================================================================
-# ENDPOINTS - Agente de Mejora Continua v1.0
+# NUEVOS ENDPOINTS - Agente de Mejora Continua v1.0
+# Agregar en omni_app.py ANTES del bloque if __name__ == "__main__"
 # ==============================================================================
 
 # --- MODELOS DE DATOS ---
@@ -752,6 +747,7 @@ Respondé SOLO con el JSON válido, sin texto adicional."""
         json_end = raw_verdict.rfind('}') + 1
         verdict = json.loads(raw_verdict[json_start:json_end])
     except Exception:
+        # Fallback si el JSON falla
         verdict = {
             "aprobado": False,
             "consenso_score": 0,
@@ -860,7 +856,7 @@ async def get_agent_docs():
     }
 
 
-# --- ENDPOINT 4: STATUS DEL AGENTE ---
+# --- ENDPOINT 4: HEALTH EXTENDIDO ---
 
 @app.get("/api/agent-status")
 async def get_agent_status():
