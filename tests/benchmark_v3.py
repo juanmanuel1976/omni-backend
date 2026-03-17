@@ -6,7 +6,6 @@ import json
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://omni-backend-dev.onrender.com")
 
 # --- EL DOCUMENTO TRAMPA (Contradicción Interna) ---
-# Simulamos un RAG que inyecta un documento largo
 CONTRATO_FALSO = """
 CONTRATO DE ARRENDAMIENTO COMERCIAL
 ... [Inicio del documento] ...
@@ -21,33 +20,41 @@ Cláusula 28 (Disposiciones Especiales y Penalidades): No obstante cualquier dis
 
 PREGUNTA_USUARIO = "El inquilino quiere rescindir el contrato en el mes 8 y ya envió la notificación hace 30 días. Según estrictamente este contrato, ¿debe pagar alguna multa?"
 
-# Preparamos el prompt simulando la inyección de tu sistema RAG
 PROMPT_COMPLETO = f"**Contenido Completo de los Documento(s) para tu Análisis:**\n---\n{CONTRATO_FALSO}\n---\n\n**Consulta del Usuario:** {PREGUNTA_USUARIO}"
 
 async def run_internal_contradiction_test():
     async with httpx.AsyncClient(timeout=300.0) as client:
         print("⚖️  INICIANDO BENCHMARK V3: DETECCIÓN DE CONTRADICCIÓN INTERNA\n")
         
-        # 1. PRUEBA BASELINE (Gemini Solo)
+        # 1. PRUEBA BASELINE
         print("🤖 Consultando a Gemini (Modelo Individual)...")
         res_base = await client.post(f"{API_BASE_URL}/api/generate-initial", json={
             "prompt": PROMPT_COMPLETO,
             "model": "gemini"
         })
+        if res_base.status_code != 200:
+            print(f"❌ Falló Gemini. Código HTTP: {res_base.status_code}\nDetalle: {res_base.text}")
+            return
+            
         respuesta_gemini = res_base.json().get("response", "")
         print("✅ Gemini respondió.\n")
 
-        # 2. PRUEBA CRISALIA (Motor Dialéctico)
+        # 2. PRUEBA CRISALIA
         print("🧠 Consultando a Crisalia (Debate Multi-Agente)...")
-        # isDocument=True activa tu regla estricta de la "Biblia"
         res_crisalia = await client.post(f"{API_BASE_URL}/api/debate", json={
             "prompt": PROMPT_COMPLETO,
             "isDocument": True 
         })
+        
+        # LA LUPA: Revisamos qué devolvió el servidor
+        if res_crisalia.status_code != 200:
+            print(f"❌ Falló Crisalia. Código HTTP: {res_crisalia.status_code}\nDetalle exacto del error del servidor:\n{res_crisalia.text}")
+            return
+            
         respuesta_crisalia = res_crisalia.json().get("synthesis", "")
         print("✅ Crisalia sintetizó.\n")
 
-        # 3. EL JUEZ CIEGO (Claude evaluando la precisión analítica)
+        # 3. EL JUEZ CIEGO
         print("🧑‍⚖️ Enviando respuestas al Juez Ciego (Claude)...")
         prompt_juez = f"""Evalúa estas dos respuestas de IA frente a un contrato que tiene una trampa (una contradicción evidente entre la Cláusula 4 y la Cláusula 28).
 
@@ -78,6 +85,10 @@ Responde en JSON:
             "model": "claude"
         })
         
+        if res_juez.status_code != 200:
+            print(f"❌ Falló el Juez. Código HTTP: {res_juez.status_code}\nDetalle: {res_juez.text}")
+            return
+            
         veredicto = res_juez.json().get("response", "")
         print("\n🏆 VEREDICTO FINAL DEL JUEZ:\n")
         print(veredicto)
