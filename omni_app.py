@@ -94,7 +94,7 @@ async def log_user_query_supabase(endpoint: str, prompt: str, extra_info: dict =
             log_entry = {
                 "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "endpoint": endpoint,
-                "prompt": prompt[:2000],
+                "prompt": prompt,
                 "extra": extra_info or {}
             }
             with open("logs/historial_consultas.jsonl", "a", encoding="utf-8") as f:
@@ -114,7 +114,7 @@ async def log_user_query_supabase(endpoint: str, prompt: str, extra_info: dict =
         payload = {
             "fecha_hora": datetime.now().isoformat(),
             "endpoint": endpoint,
-            "prompt": prompt[:2000],
+            "prompt": prompt,
             "extra_info": extra_info or {}
         }
         async with httpx.AsyncClient(timeout=10.0) as client:
