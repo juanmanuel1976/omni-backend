@@ -9,16 +9,17 @@ import io
 import pypdf
 import logging
 import sys
-from fastapi import FastAPI, HTTPException, File, UploadFile, Form
+from fastapi import FastAPI, HTTPException, File, UploadFile, Form, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Optional, List, Any
 from anthropic import AsyncAnthropic
 from rag_manager import rag_manager
-import logging
 from datetime import datetime
 from ocr_processor import ocr_processor
+import sqlite3
+from contextlib import contextmanager
 
 # CONFIGURACIÓN DE LOGGING DETALLADO
 logging.basicConfig(
@@ -35,6 +36,10 @@ MODEL_TIMEOUT_VALIDATION = 55.0  # max 7 llamadas x 55s = 385s < 600s limite Ren
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+
+# CLAVES DE SUPABASE PARA LOGS EN SEGUNDO PLANO
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
 # --- INICIALIZACIÓN DE LA APLICACIÓN FASTAPI ---
 app = FastAPI(title="OmniQuery API")
@@ -65,7 +70,6 @@ class RefineRequest(BaseModel):
     synthesis_type: str
     history: list = []
 
-# Modelo Actualizado para aceptar el contexto de refinamiento
 class DebateRequest(BaseModel):
     prompt: str
     history: list = []
@@ -80,53 +84,78 @@ class FactCheckRequest(BaseModel):
     text_to_check: str
     original_query: str
 
+# --- REGISTRADOR DE CONSULTAS EN SEGUNDO PLANO (SUPABASE / LOCAL FALLBACK) ---
+async def log_user_query_supabase(endpoint: str, prompt: str, extra_info: dict = None):
+    """Guarda silenciosamente las consultas usando Background Tasks. Latencia cero para el usuario."""
+    # Si aún no configuraste Supabase, usa un archivo local de respaldo
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        try:
+            os.makedirs("logs", exist_ok=True)
+            log_entry = {
+                "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "endpoint": endpoint,
+                "prompt": prompt[:2000],
+                "extra": extra_info or {}
+            }
+            with open("logs/historial_consultas.jsonl", "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+        except Exception as e:
+            logger.error(f"Fallo al guardar el log local: {e}")
+        return
+
+    # Si tienes Supabase, lo envía en las sombras
+    try:
+        headers = {
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
+        }
+        payload = {
+            "fecha_hora": datetime.now().isoformat(),
+            "endpoint": endpoint,
+            "prompt": prompt[:2000],
+            "extra_info": extra_info or {}
+        }
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.post(f"{SUPABASE_URL}/rest/v1/consultas_log", headers=headers, json=payload)
+    except Exception as e:
+        logger.error(f"Fallo al guardar el log en Supabase: {e}")
+
 # --- FUNCIONES AUXILIARES RAG ---
 async def get_text_from_files(files: List[UploadFile]) -> str:
     text = ""
-    
     for file in files:
         try:
             logger.info(f"Procesando archivo: {file.filename}")
             file_content = await file.read()
-            
             if file.content_type == 'application/pdf':
                 try:
-                    # PASO 1: Detectar si es escaneado
                     logger.info(f"Detectando si PDF está escaneado...")
                     is_scanned = ocr_processor.is_pdf_scanned(file_content)
                     logger.info(f"PDF escaneado: {is_scanned}")
-                    
                     if is_scanned:
-                        # PASO 2: Usar OCR si es escaneado
                         logger.info(f"PDF escaneado detectado, usando OCR...")
-                        ocr_text = await ocr_processor.extract_text_with_ocr(
-                            file_content, 
-                            max_pages=100
-                        )
+                        ocr_text = await ocr_processor.extract_text_with_ocr(file_content, max_pages=100)
                         text += ocr_text + "\n\n"
                     else:
-                        # PASO 3: Usar pypdf si NO es escaneado
                         logger.info(f"PDF normal, usando extracción estándar...")
                         pdf_reader = pypdf.PdfReader(io.BytesIO(file_content))
                         logger.info(f"PDF tiene {len(pdf_reader.pages)} páginas")
-                        
                         for page in pdf_reader.pages:
                             page_text = page.extract_text() or ""
                             text += page_text
-                            
                 except Exception as pdf_error:
                     logger.error(f"ERROR procesando PDF {file.filename}: {pdf_error}", exc_info=True)
-                    raise  # Re-lanzar para ver el traceback completo
-                    
+                    raise
             elif file.content_type == 'text/plain':
                 text += file_content.decode('utf-8')
-                
         except Exception as file_error:
             logger.error(f"ERROR general con archivo {file.filename}: {file_error}", exc_info=True)
-            raise  # Re-lanzar para que FastAPI muestre el error
-    
+            raise
     logger.info(f"Texto total extraído: {len(text)} caracteres")
     return text
+
 # --- LÓGICA DE PROMPTS ---
 def build_contextual_prompt(user_prompt, history, mode, isDocument=False):
     history_context = ""
@@ -163,7 +192,6 @@ def build_contextual_prompt(user_prompt, history, mode, isDocument=False):
 """
     return f"{history_context}\n{base_prompt}" if history_context else base_prompt
 
-# Función de construcción de prompt mejorada
 def build_enhanced_dialectic_prompt(base_prompt, dissidence_context=None):
     enhanced_prompt = base_prompt
     if dissidence_context:
@@ -366,10 +394,17 @@ Contexto de la consulta original: "{original_query}"
 # --- RUTAS DE LA APLICACIÓN (ENDPOINTS) ---
 
 @app.post("/api/rag-analysis")
-async def rag_analysis_and_synthesize(prompt: str = Form(...), history_json: str = Form("[]"), files: List[UploadFile] = File(...)):
+async def rag_analysis_and_synthesize(raw_request: Request, background_tasks: BackgroundTasks, prompt: str = Form(...), history_json: str = Form("[]"), files: List[UploadFile] = File(...)):
     if not files:
         raise HTTPException(status_code=400, detail="No se han subido archivos.")
     try:
+        # Extraer IP real
+        x_forwarded = raw_request.headers.get("X-Forwarded-For")
+        client_ip = x_forwarded.split(",")[0].strip() if x_forwarded else (raw_request.client.host if raw_request.client else "127.0.0.1")
+
+        # LOG INVISIBLE AL USUARIO
+        background_tasks.add_task(log_user_query_supabase, "/api/rag-analysis", prompt, {"archivos": [f.filename for f in files], "ip_usuario": client_ip})
+
         history = json.loads(history_json) if history_json else []
         raw_text = await get_text_from_files(files)
         if not raw_text.strip():
@@ -388,7 +423,7 @@ async def rag_analysis_and_synthesize(prompt: str = Form(...), history_json: str
 ---
 """
             direct_request = DebateRequest(prompt=augmented_prompt, history=history, isDocument=True)
-            result = await debate_and_synthesize(direct_request)
+            result = await debate_and_synthesize(raw_request, direct_request, background_tasks)
             result["rag_metadata"] = {"strategy_used": "direct_analysis_bypass", "source_files": [f.filename for f in files]}
             return result
         else:
@@ -407,7 +442,7 @@ async def rag_analysis_and_synthesize(prompt: str = Form(...), history_json: str
 **Consulta del Usuario:**
 {prompt}"""
             rag_request = DebateRequest(prompt=augmented_prompt, history=history, isDocument=True)
-            result = await debate_and_synthesize(rag_request)
+            result = await debate_and_synthesize(raw_request, rag_request, background_tasks)
             
             rag_stats = rag_manager.get_stats()
             if isinstance(result, dict):
@@ -420,7 +455,12 @@ async def rag_analysis_and_synthesize(prompt: str = Form(...), history_json: str
         raise HTTPException(status_code=500, detail=f"Error en análisis RAG: {str(e)}")
         
 @app.post('/api/generate')
-async def generate_initial_stream(request: GenerateRequest):
+async def generate_initial_stream(raw_request: Request, request: GenerateRequest, background_tasks: BackgroundTasks):
+    x_forwarded = raw_request.headers.get("X-Forwarded-For")
+    client_ip = x_forwarded.split(",")[0].strip() if x_forwarded else (raw_request.client.host if raw_request.client else "127.0.0.1")
+    
+    background_tasks.add_task(log_user_query_supabase, "/api/generate", request.prompt, {"mode": request.mode, "ip_usuario": client_ip})
+
     contextual_prompt = build_contextual_prompt(request.prompt, request.history, request.mode)
     async def event_stream():
         tasks = { "gemini": stream_gemini(contextual_prompt), "deepseek": stream_deepseek(contextual_prompt), "claude": stream_claude(contextual_prompt) }
@@ -445,13 +485,23 @@ async def generate_initial_stream(request: GenerateRequest):
     return StreamingResponse(event_stream(), media_type='text/event-stream')
 
 @app.post('/api/generate-initial')
-async def generate_initial_response(request: GenerateInitialRequest):
+async def generate_initial_response(raw_request: Request, request: GenerateInitialRequest, background_tasks: BackgroundTasks):
+    x_forwarded = raw_request.headers.get("X-Forwarded-For")
+    client_ip = x_forwarded.split(",")[0].strip() if x_forwarded else (raw_request.client.host if raw_request.client else "127.0.0.1")
+    
+    background_tasks.add_task(log_user_query_supabase, "/api/generate-initial", request.prompt, {"model": request.model, "ip_usuario": client_ip})
+
     contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'direct')
     response = await call_ai_model_no_stream(request.model, contextual_prompt)
     return {"response": response}
 
 @app.post('/api/refine')
-async def refine_and_synthesize(request: RefineRequest):
+async def refine_and_synthesize(raw_request: Request, request: RefineRequest, background_tasks: BackgroundTasks):
+    x_forwarded = raw_request.headers.get("X-Forwarded-For")
+    client_ip = x_forwarded.split(",")[0].strip() if x_forwarded else (raw_request.client.host if raw_request.client else "127.0.0.1")
+    
+    background_tasks.add_task(log_user_query_supabase, "/api/refine", request.prompt, {"synthesis_type": request.synthesis_type, "ip_usuario": client_ip})
+
     contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'direct')
     active_responses = {k: v['content'] for k, v in request.initial_responses.items() if request.decisions.get(k) != 'discard'}
     highlighted_response = next((v['content'] for k, v in request.initial_responses.items() if request.decisions.get(k) == 'highlight'), None)
@@ -470,7 +520,12 @@ async def refine_and_synthesize(request: RefineRequest):
     return {"synthesis": synthesis_text}
 
 @app.post('/api/debate')
-async def debate_and_synthesize(request: DebateRequest):
+async def debate_and_synthesize(raw_request: Request, request: DebateRequest, background_tasks: BackgroundTasks):
+    x_forwarded = raw_request.headers.get("X-Forwarded-For")
+    client_ip = x_forwarded.split(",")[0].strip() if x_forwarded else (raw_request.client.host if raw_request.client else "127.0.0.1")
+    
+    background_tasks.add_task(log_user_query_supabase, "/api/debate", request.prompt, {"isDocument": request.isDocument, "ip_usuario": client_ip})
+
     contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'direct', request.isDocument)
     
     if request.dissidenceContext:
@@ -547,53 +602,42 @@ async def startup_event():
         
 # ==============================================================================
 # NUEVOS ENDPOINTS - Agente de Mejora Continua v1.0
-# Agregar en omni_app.py ANTES del bloque if __name__ == "__main__"
 # ==============================================================================
 
 # --- MODELOS DE DATOS ---
 
 class ValidateChangeRequest(BaseModel):
-    """
-    Solicitud de validación dialéctica de un cambio de código.
-    El agente externo (Claude) envía el cambio y los 3 modelos de Crisalia debaten.
-    """
-    archivo: str                    # Ej: "dialectic-enhancements.js"
-    descripcion: str                # Qué hace el cambio en lenguaje natural
-    codigo_original: str            # Fragmento ANTES del cambio
-    codigo_propuesto: str           # Fragmento DESPUÉS del cambio
-    tipo: str = "code"              # "code" | "ux" | "benchmark"
-    contexto_adicional: str = ""    # Cualquier info extra relevante
+    archivo: str                    
+    descripcion: str                
+    codigo_original: str            
+    codigo_propuesto: str           
+    tipo: str = "code"              
+    contexto_adicional: str = ""    
 
 class ValidateChangeResponse(BaseModel):
     aprobado: bool
-    consenso_score: int             # 0-100
-    veredicto: str                  # "APROBADO" | "APROBADO_CON_OBSERVACIONES" | "RECHAZADO"
-    debate: Dict[str, Any]          # Respuestas individuales de cada modelo
-    sintesis: str                   # Síntesis final del debate
-    riesgos: list                   # Lista de riesgos identificados
-    sugerencias: list               # Mejoras sugeridas
+    consenso_score: int             
+    veredicto: str                  
+    debate: Dict[str, Any]          
+    sintesis: str                   
+    riesgos: list                   
+    sugerencias: list               
     timestamp: str
 
 class AgentStepRequest(BaseModel):
-    """
-    Registro de un paso del agente con documentación automática.
-    """
     paso_numero: int
     titulo: str
     descripcion: str
     archivos_afectados: list = []
-    resultado: str = ""             # "pendiente" | "aplicado" | "revertido" | "validado"
-    validacion_id: str = ""         # ID de la validación dialéctica si existe
+    resultado: str = ""             
+    validacion_id: str = ""         
 
 class AgentStepResponse(BaseModel):
     paso_id: str
     timestamp: str
     documentacion_actualizada: bool
 
-# --- PERSISTENCIA SQLite (v1.0 - reemplazable por Supabase en v2) ---
-import sqlite3
-from contextlib import contextmanager
-
+# --- PERSISTENCIA SQLite ---
 AGENT_DB_PATH = 'crisalia_agent.db'
 
 @contextmanager
@@ -622,7 +666,6 @@ def init_agent_db():
 
 init_agent_db()
 
-# Cache RAM de sesion (SQLite es fuente de verdad)
 _agent_log: list = []
 _validation_log: list = []
 
@@ -630,13 +673,6 @@ _validation_log: list = []
 
 @app.post("/api/validate-change", response_model=ValidateChangeResponse)
 async def validate_change(request: ValidateChangeRequest):
-    """
-    El corazón del Agente Crisalia.
-    Recibe un cambio propuesto y lo somete al debate dialéctico interno.
-    Los 3 modelos analizan el cambio y producen un veredicto con consenso.
-    """
-    
-    # Construir prompt de validación según el tipo
     tipo_label = {
         "code": "corrección/optimización de código",
         "ux": "mejora de interfaz de usuario",
@@ -655,14 +691,12 @@ DESCRIPCIÓN DEL CAMBIO:
 {request.descripcion}
 
 CÓDIGO ORIGINAL:
-```
 {request.codigo_original}
-```
+
 
 CÓDIGO PROPUESTO:
-```
 {request.codigo_propuesto}
-```
+
 
 {f"CONTEXTO ADICIONAL: {request.contexto_adicional}" if request.contexto_adicional else ""}
 
@@ -674,7 +708,6 @@ TU TAREA:
 
 Respondé de forma concisa y técnica. Máximo 4 oraciones."""
 
-    # Obtener respuestas iniciales de los 3 modelos en paralelo
     initial_tasks = [
         call_ai_model_no_stream('gemini', prompt_validacion, timeout=MODEL_TIMEOUT_VALIDATION),
         call_ai_model_no_stream('deepseek', prompt_validacion, timeout=MODEL_TIMEOUT_VALIDATION),
@@ -687,7 +720,6 @@ Respondé de forma concisa y técnica. Máximo 4 oraciones."""
         'claude': results[2]
     }
 
-    # Ronda de crítica cruzada (cada modelo ve las respuestas de los otros)
     critique_tasks = []
     models_order = ['gemini', 'deepseek', 'claude']
     for model in models_order:
@@ -710,7 +742,6 @@ Sé específico. Si el cambio es seguro, decilo claramente. Si hay riesgo, nombr
     critique_results = await asyncio.gather(*critique_tasks)
     revised_responses = dict(zip(models_order, critique_results))
 
-    # Síntesis final con veredicto
     synthesis_prompt = f"""Sos el árbitro final de una revisión de código dialéctica para Crisalia.
 
 CAMBIO PROPUESTO en {request.archivo}:
@@ -735,13 +766,11 @@ Respondé SOLO con el JSON válido, sin texto adicional."""
 
     raw_verdict = await call_ai_model_no_stream('gemini', synthesis_prompt, timeout=MODEL_TIMEOUT_VALIDATION)
 
-    # Parsear veredicto
     try:
         json_start = raw_verdict.find('{')
         json_end = raw_verdict.rfind('}') + 1
         verdict = json.loads(raw_verdict[json_start:json_end])
     except Exception:
-        # Fallback si el JSON falla
         verdict = {
             "aprobado": False,
             "consenso_score": 0,
@@ -751,7 +780,6 @@ Respondé SOLO con el JSON válido, sin texto adicional."""
             "sugerencias": []
         }
 
-    # Guardar en log interno
     validation_entry = {
         "id": f"val_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
         "timestamp": datetime.now().isoformat(),
@@ -783,10 +811,6 @@ Respondé SOLO con el JSON válido, sin texto adicional."""
 
 @app.post("/api/agent-step", response_model=AgentStepResponse)
 async def register_agent_step(request: AgentStepRequest):
-    """
-    Registra cada paso del agente con documentación automática.
-    Construye un log acumulativo que sirve como documentación del proceso.
-    """
     paso_id = f"step_{request.paso_numero:03d}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     timestamp = datetime.now().isoformat()
 
@@ -813,12 +837,6 @@ async def register_agent_step(request: AgentStepRequest):
 
 @app.get("/api/agent-docs")
 async def get_agent_docs():
-    """
-    Devuelve la documentación completa del agente:
-    - Historial de pasos aplicados
-    - Historial de validaciones dialécticas
-    - Estadísticas del proceso
-    """
     total_validaciones = len(_validation_log)
     aprobadas = sum(1 for v in _validation_log if v.get("veredicto") == "APROBADO")
     con_obs = sum(1 for v in _validation_log if v.get("veredicto") == "APROBADO_CON_OBSERVACIONES")
@@ -854,7 +872,6 @@ async def get_agent_docs():
 
 @app.get("/api/agent-status")
 async def get_agent_status():
-    """Estado del Agente de Mejora Continua."""
     return {
         "agente_activo": True,
         "version_agente": "1.0",
