@@ -219,7 +219,7 @@ async def stream_gemini(prompt):
         return
     try:
         async with httpx.AsyncClient(timeout=360.0) as client:
-            url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=){GOOGLE_API_KEY}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key={GOOGLE_API_KEY}"
             payload = {"contents": [{"parts": [{"text": prompt}]}]}
             async with client.stream("POST", url, json=payload) as response:
                 if response.status_code != 200:
@@ -244,7 +244,7 @@ async def stream_deepseek(prompt):
         async with httpx.AsyncClient(timeout=360.0) as client:
             headers = {"Authorization": f"Bearer {DEEPSEEK_API_KEY}"}
             payload = {"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "stream": True}
-            async with client.stream("POST", "[https://api.deepseek.com/chat/completions](https://api.deepseek.com/chat/completions)", headers=headers, json=payload) as response:
+            async with client.stream("POST", "https://api.deepseek.com/chat/completions", headers=headers, json=payload) as response:
                 if response.status_code != 200:
                     error_text = await response.aread()
                     yield {"model": "deepseek", "chunk": f"Error: {error_text.decode()}"}
@@ -280,7 +280,7 @@ async def call_ai_model_no_stream(model_name: str, prompt: str, timeout: float =
         async with httpx.AsyncClient(timeout=timeout) as client:
             if model_name == "gemini":
                 if not GOOGLE_API_KEY: return "Error: GOOGLE_API_KEY no configurada."
-                url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=){GOOGLE_API_KEY}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GOOGLE_API_KEY}"
                 payload = {"contents": [{"parts": [{"text": prompt}]}]}
                 r = await client.post(url, json=payload)
                 if r.status_code != 200: return f"Error HTTP {r.status_code}: {r.text}"
@@ -289,7 +289,7 @@ async def call_ai_model_no_stream(model_name: str, prompt: str, timeout: float =
                 if not DEEPSEEK_API_KEY: return "Error: DEEPSEEK_API_KEY no configurada."
                 headers = {"Authorization": f"Bearer {DEEPSEEK_API_KEY}"}
                 payload = {"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}]}
-                r = await client.post("[https://api.deepseek.com/chat/completions](https://api.deepseek.com/chat/completions)", headers=headers, json=payload)
+                r = await client.post("https://api.deepseek.com/chat/completions", headers=headers, json=payload)
                 if r.status_code != 200: return f"Error HTTP {r.status_code}: {r.text}"
                 return r.json()["choices"][0]["message"]["content"]
             elif model_name == "claude":
@@ -460,7 +460,8 @@ async def generate_initial_stream(raw_request: Request, request: GenerateRequest
     async def event_stream():
         tasks = { "gemini": stream_gemini(contextual_prompt), "deepseek": stream_deepseek(contextual_prompt), "claude": stream_claude(contextual_prompt) }
         async def stream_wrapper(name, agen):
-            async for item in agen: yield name, item
+            async for item in agen:
+                yield name, item
         merged_agen = stream_merger(*[stream_wrapper(name, agen) for name, agen in tasks.items()])
         async for name, item in merged_agen:
             yield f"data: {json.dumps(item)}\n\n"
