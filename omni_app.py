@@ -222,6 +222,7 @@ async def stream_gemini(prompt, endpoint="unknown"):
         yield {"model": "gemini", "chunk": "Error: GOOGLE_API_KEY no configurada."}
         return
     tokens_in, tokens_out = 0, 0
+    raw_buffer = []
     try:
         async with httpx.AsyncClient(timeout=360.0) as client:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key={GOOGLE_API_KEY}"
@@ -232,20 +233,25 @@ async def stream_gemini(prompt, endpoint="unknown"):
                     yield {"model": "gemini", "chunk": f"Error: {error_text.decode()}"}
                     return
                 async for line in response.aiter_lines():
+                    raw_buffer.append(line)
                     if '"text": "' in line:
                         try:
                             text_content = line.split('"text": "')[1].rsplit('"', 1)[0]
                             yield {"model": "gemini", "chunk": text_content.replace('\\n', '\n').replace('\\"', '"')}
                         except IndexError:
                             continue
-                    if '"promptTokenCount"' in line:
-                        try:
-                            data = json.loads(line.strip().lstrip('[').rstrip(',]'))
-                            usage = data.get("usageMetadata", {})
-                            tokens_in = usage.get("promptTokenCount", tokens_in)
-                            tokens_out = usage.get("candidatesTokenCount", tokens_out)
-                        except Exception:
-                            pass
+        # Parsear usage del buffer completo al terminar el stream
+        full_response = "\n".join(raw_buffer)
+        if '"promptTokenCount"' in full_response:
+            try:
+                # El buffer es un array JSON: [{...}, {...}] — tomar el último objeto
+                chunks = json.loads(full_response)
+                last = chunks[-1] if isinstance(chunks, list) else chunks
+                usage = last.get("usageMetadata", {})
+                tokens_in = usage.get("promptTokenCount", 0)
+                tokens_out = usage.get("candidatesTokenCount", 0)
+            except Exception:
+                pass
     except Exception as e:
         yield {"model": "gemini", "chunk": f"Error: {e}"}
     finally:
