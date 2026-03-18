@@ -20,6 +20,7 @@ from datetime import datetime
 from ocr_processor import ocr_processor
 import sqlite3
 from contextlib import contextmanager
+import costs_tracker
 
 # CONFIGURACIÓN DE LOGGING DETALLADO
 logging.basicConfig(
@@ -278,7 +279,7 @@ async def stream_claude(prompt):
     except Exception as e:
         yield {"model": "claude", "chunk": f"Error: {e}"}
 
-async def call_ai_model_no_stream(model_name: str, prompt: str, timeout: float = 360.0):
+async def call_ai_model_no_stream(model_name: str, prompt: str, timeout: float = 360.0, endpoint: str = "unknown"):
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             if model_name == "gemini":
@@ -287,18 +288,25 @@ async def call_ai_model_no_stream(model_name: str, prompt: str, timeout: float =
                 payload = {"contents": [{"parts": [{"text": prompt}]}]}
                 r = await client.post(url, json=payload)
                 if r.status_code != 200: return f"Error HTTP {r.status_code}: {r.text}"
-                return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+                data = r.json()
+                usage = data.get("usageMetadata", {})
+                costs_tracker.log_cost("gemini", endpoint, usage.get("promptTokenCount", 0), usage.get("candidatesTokenCount", 0))
+                return data["candidates"][0]["content"]["parts"][0]["text"]
             elif model_name == "deepseek":
                 if not DEEPSEEK_API_KEY: return "Error: DEEPSEEK_API_KEY no configurada."
                 headers = {"Authorization": f"Bearer {DEEPSEEK_API_KEY}"}
                 payload = {"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}]}
                 r = await client.post("https://api.deepseek.com/chat/completions", headers=headers, json=payload)
                 if r.status_code != 200: return f"Error HTTP {r.status_code}: {r.text}"
-                return r.json()["choices"][0]["message"]["content"]
+                data = r.json()
+                usage = data.get("usage", {})
+                costs_tracker.log_cost("deepseek", endpoint, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+                return data["choices"][0]["message"]["content"]
             elif model_name == "claude":
                 if not ANTHROPIC_API_KEY: return "Error: ANTHROPIC_API_KEY no configurada."
                 client_anthropic = AsyncAnthropic(api_key=ANTHROPIC_API_KEY, timeout=360.0)
                 msg = await client_anthropic.messages.create(model="claude-3-haiku-20240307", max_tokens=4069, messages=[{"role": "user", "content": prompt}])
+                costs_tracker.log_cost("claude", endpoint, msg.usage.input_tokens, msg.usage.output_tokens)
                 return msg.content[0].text
     except Exception as e:
         return f"Error en {model_name}: {e}"
@@ -665,6 +673,7 @@ def init_agent_db():
         )
 
 init_agent_db()
+costs_tracker.init_db()
 
 _agent_log: list = []
 _validation_log: list = []
@@ -681,9 +690,9 @@ async def validate_change(request: ValidateChangeRequest):
 
     prompt_validacion = f"""Sos un experto en desarrollo de software analizando una propuesta de {tipo_label} para Crisalia.
 
-Crisalia es una plataforma multi-IA dialéctica para el sector jurídico-político argentino.
+Crisalia es una plataforma multi-IA dialéctica para profesionales que necesitan análisis robustos y libres del sesgo de un modelo único.
 Su diferencial es hacer debatir a Gemini, DeepSeek y Claude para producir síntesis superiores.
-El objetivo final es su monetización en el mercado legal argentino.
+Sus casos de uso incluyen análisis estratégico, investigación, due diligence legal y financiero, y toma de decisiones de alto impacto en cualquier industria.
 
 ARCHIVO AFECTADO: {request.archivo}
 
@@ -880,6 +889,19 @@ async def get_agent_status():
         "ultimo_paso": _agent_log[-1]["titulo"] if _agent_log else "ninguno",
         "ultima_validacion": _validation_log[-1]["veredicto"] if _validation_log else "ninguna"
     }
+
+
+# ==============================================================================
+# ENDPOINTS DE MONITOREO DE COSTOS LLM
+# ==============================================================================
+
+@app.get("/api/costs/summary")
+async def get_costs_summary():
+    """Retorna el resumen completo de costos LLM para el dashboard en div.crisalia.io"""
+    try:
+        return costs_tracker.get_summary()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener costos: {str(e)}")
 
 
 if __name__ == "__main__":
