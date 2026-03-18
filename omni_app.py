@@ -217,10 +217,11 @@ def build_enhanced_dialectic_prompt(base_prompt, dissidence_context=None):
     return enhanced_prompt
 
 # --- FUNCIONES DE LLAMADA A LAS APIs ---
-async def stream_gemini(prompt):
+async def stream_gemini(prompt, endpoint="unknown"):
     if not GOOGLE_API_KEY:
         yield {"model": "gemini", "chunk": "Error: GOOGLE_API_KEY no configurada."}
         return
+    tokens_in, tokens_out = 0, 0
     try:
         async with httpx.AsyncClient(timeout=360.0) as client:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key={GOOGLE_API_KEY}"
@@ -237,17 +238,30 @@ async def stream_gemini(prompt):
                             yield {"model": "gemini", "chunk": text_content.replace('\\n', '\n').replace('\\"', '"')}
                         except IndexError:
                             continue
+                    if '"promptTokenCount"' in line:
+                        try:
+                            data = json.loads(line.strip().lstrip('[').rstrip(',]'))
+                            usage = data.get("usageMetadata", {})
+                            tokens_in = usage.get("promptTokenCount", tokens_in)
+                            tokens_out = usage.get("candidatesTokenCount", tokens_out)
+                        except Exception:
+                            pass
     except Exception as e:
         yield {"model": "gemini", "chunk": f"Error: {e}"}
+    finally:
+        if tokens_in or tokens_out:
+            await costs_tracker.log_cost("gemini", endpoint, tokens_in, tokens_out)
 
-async def stream_deepseek(prompt):
+async def stream_deepseek(prompt, endpoint="unknown"):
     if not DEEPSEEK_API_KEY:
         yield {"model": "deepseek", "chunk": "Error: DEEPSEEK_API_KEY no configurada."}
         return
+    tokens_in, tokens_out = 0, 0
     try:
         async with httpx.AsyncClient(timeout=360.0) as client:
             headers = {"Authorization": f"Bearer {DEEPSEEK_API_KEY}"}
-            payload = {"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "stream": True}
+            payload = {"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}],
+                       "stream": True, "stream_options": {"include_usage": True}}
             async with client.stream("POST", "https://api.deepseek.com/chat/completions", headers=headers, json=payload) as response:
                 if response.status_code != 200:
                     error_text = await response.aread()
@@ -262,12 +276,19 @@ async def stream_deepseek(prompt):
                             data = json.loads(data_str)
                             if data.get('choices', [{}])[0].get('delta', {}).get('content'):
                                 yield {"model": "deepseek", "chunk": data['choices'][0]['delta']['content']}
+                            usage = data.get("usage")
+                            if usage:
+                                tokens_in = usage.get("prompt_tokens", tokens_in)
+                                tokens_out = usage.get("completion_tokens", tokens_out)
                         except json.JSONDecodeError:
                             continue
     except Exception as e:
         yield {"model": "deepseek", "chunk": f"Error: {e}"}
+    finally:
+        if tokens_in or tokens_out:
+            await costs_tracker.log_cost("deepseek", endpoint, tokens_in, tokens_out)
 
-async def stream_claude(prompt):
+async def stream_claude(prompt, endpoint="unknown"):
     if not ANTHROPIC_API_KEY:
         yield {"model": "claude", "chunk": "Error: ANTHROPIC_API_KEY no configurada."}
         return
@@ -276,6 +297,8 @@ async def stream_claude(prompt):
         async with client.messages.stream(model="claude-3-haiku-20240307", max_tokens=4069, messages=[{"role": "user", "content": prompt}]) as stream:
             async for text in stream.text_stream:
                 yield {"model": "claude", "chunk": text}
+            final_msg = await stream.get_final_message()
+            await costs_tracker.log_cost("claude", endpoint, final_msg.usage.input_tokens, final_msg.usage.output_tokens)
     except Exception as e:
         yield {"model": "claude", "chunk": f"Error: {e}"}
 
@@ -471,7 +494,7 @@ async def generate_initial_stream(raw_request: Request, request: GenerateRequest
 
     contextual_prompt = build_contextual_prompt(request.prompt, request.history, request.mode)
     async def event_stream():
-        tasks = { "gemini": stream_gemini(contextual_prompt), "deepseek": stream_deepseek(contextual_prompt), "claude": stream_claude(contextual_prompt) }
+        tasks = { "gemini": stream_gemini(contextual_prompt, "/api/generate"), "deepseek": stream_deepseek(contextual_prompt, "/api/generate"), "claude": stream_claude(contextual_prompt, "/api/generate") }
         async def stream_wrapper(name, agen):
             async for item in agen:
                 yield name, item
