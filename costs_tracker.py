@@ -1,15 +1,18 @@
 # ==============================================================================
-# COSTS TRACKER — Crisalia LLM Cost Monitor v1.0
+# COSTS TRACKER — Crisalia LLM Cost Monitor v2.0
 # Registra tokens y costo estimado de cada llamada a los modelos de IA.
-# Se integra con omni_app.py modificando call_ai_model_no_stream.
+# Persistencia: Supabase (tabla llm_costs_log) — no usa SQLite.
 # ==============================================================================
 
-import sqlite3
 import os
-from datetime import datetime
-from contextlib import contextmanager
+import logging
+import httpx
+from datetime import datetime, date, timedelta
 
-COSTS_DB_PATH = os.path.join(os.path.dirname(__file__), 'crisalia_costs.db')
+logger = logging.getLogger(__name__)
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
 # Precios por 1M tokens (USD) — actualizar si los proveedores cambian precios
 PRICING = {
@@ -18,31 +21,23 @@ PRICING = {
     'claude':   {'input': 0.25,   'output': 1.25},
 }
 
-
-@contextmanager
-def get_db():
-    conn = sqlite3.connect(COSTS_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
+TABLE = "llm_costs_log"
 
 
-def init_db():
-    with get_db() as conn:
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS llm_costs_log (
-                id             INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp      TEXT    NOT NULL,
-                model          TEXT    NOT NULL,
-                endpoint       TEXT    NOT NULL DEFAULT 'unknown',
-                tokens_input   INTEGER DEFAULT 0,
-                tokens_output  INTEGER DEFAULT 0,
-                cost_usd       REAL    DEFAULT 0.0
-            )
-        ''')
+def _read_headers():
+    return {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+    }
+
+
+def _write_headers():
+    return {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal",
+    }
 
 
 def calc_cost(model: str, tokens_input: int, tokens_output: int) -> float:
@@ -52,91 +47,158 @@ def calc_cost(model: str, tokens_input: int, tokens_output: int) -> float:
 
 def log_cost(model: str, endpoint: str, tokens_input: int, tokens_output: int) -> float:
     cost = calc_cost(model, tokens_input, tokens_output)
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        logger.warning("[costs_tracker] Supabase no configurado — costo no guardado.")
+        return cost
     try:
-        with get_db() as conn:
-            conn.execute(
-                'INSERT INTO llm_costs_log '
-                '(timestamp, model, endpoint, tokens_input, tokens_output, cost_usd) '
-                'VALUES (?, ?, ?, ?, ?, ?)',
-                (datetime.now().isoformat(), model, endpoint, tokens_input, tokens_output, cost)
+        payload = {
+            "timestamp":     datetime.now().isoformat(),
+            "model":         model,
+            "endpoint":      endpoint,
+            "tokens_input":  tokens_input,
+            "tokens_output": tokens_output,
+            "cost_usd":      round(cost, 8),
+        }
+        with httpx.Client(timeout=5.0) as client:
+            client.post(
+                f"{SUPABASE_URL}/rest/v1/{TABLE}",
+                headers=_write_headers(),
+                json=payload,
             )
     except Exception as e:
-        print(f"[costs_tracker] Error al guardar costo: {e}")
+        logger.error(f"[costs_tracker] Error al guardar costo: {e}")
     return cost
 
 
 def get_summary() -> dict:
-    with get_db() as conn:
-        # Totales globales
-        totals = conn.execute('''
-            SELECT
-                ROUND(SUM(cost_usd), 6)              AS total_usd,
-                SUM(tokens_input + tokens_output)    AS total_tokens,
-                COUNT(*)                             AS total_calls
-            FROM llm_costs_log
-        ''').fetchone()
+    """
+    Retorna el resumen agregado de costos para el dashboard.
 
-        # Totales de hoy
-        today = conn.execute('''
-            SELECT
-                ROUND(SUM(cost_usd), 6) AS cost_today,
-                COUNT(*)                AS calls_today
-            FROM llm_costs_log
-            WHERE DATE(timestamp) = DATE('now')
-        ''').fetchone()
+    TODO (próxima iteración — ESCALABILIDAD):
+    El procesamiento actual descarga hasta 5000 filas a la RAM del servidor
+    y agrega en Python. Migrar a VIEW o función RPC en Supabase cuando el
+    volumen de registros supere los 10.000.
+    """
+    rows = _fetch_all_rows()
+    if not rows:
+        return _empty_summary()
 
-        # Por modelo
-        by_model = conn.execute('''
-            SELECT
-                model,
-                ROUND(SUM(cost_usd), 6)  AS cost_usd,
-                SUM(tokens_input)        AS tokens_in,
-                SUM(tokens_output)       AS tokens_out,
-                COUNT(*)                 AS calls
-            FROM llm_costs_log
-            GROUP BY model
-            ORDER BY cost_usd DESC
-        ''').fetchall()
+    today_str  = date.today().isoformat()
+    cutoff_30d = (date.today() - timedelta(days=30)).isoformat()
 
-        # Por endpoint
-        by_endpoint = conn.execute('''
-            SELECT
-                endpoint,
-                ROUND(SUM(cost_usd), 6) AS cost_usd,
-                COUNT(*)                AS calls
-            FROM llm_costs_log
-            GROUP BY endpoint
-            ORDER BY cost_usd DESC
-        ''').fetchall()
+    total_cost   = 0.0
+    total_tokens = 0
+    total_calls  = 0
+    cost_today   = 0.0
+    calls_today  = 0
 
-        # Evolución diaria últimos 30 días, desglosada por modelo
-        daily = conn.execute('''
-            SELECT
-                DATE(timestamp)          AS date,
-                model,
-                ROUND(SUM(cost_usd), 6) AS cost_usd,
-                COUNT(*)                AS calls
-            FROM llm_costs_log
-            WHERE timestamp >= DATE('now', '-30 days')
-            GROUP BY DATE(timestamp), model
-            ORDER BY date ASC
-        ''').fetchall()
+    by_model    = {}
+    by_endpoint = {}
+    daily_dict  = {}
 
-        # Últimas 50 llamadas
-        recent = conn.execute('''
-            SELECT timestamp, model, endpoint, tokens_input, tokens_output,
-                   ROUND(cost_usd, 6) AS cost_usd
-            FROM llm_costs_log
-            ORDER BY id DESC
-            LIMIT 50
-        ''').fetchall()
+    for r in rows:
+        cost     = r.get('cost_usd', 0) or 0
+        tin      = r.get('tokens_input', 0) or 0
+        tout     = r.get('tokens_output', 0) or 0
+        model    = r.get('model', 'unknown')
+        endpoint = r.get('endpoint', 'unknown')
+        ts       = r.get('timestamp', '')
+        day      = ts[:10] if ts else ''
 
-        return {
-            'totals':       dict(totals),
-            'today':        dict(today),
-            'by_model':     [dict(r) for r in by_model],
-            'by_endpoint':  [dict(r) for r in by_endpoint],
-            'daily':        [dict(r) for r in daily],
-            'recent':       [dict(r) for r in recent],
-            'pricing':      PRICING,
+        total_cost   += cost
+        total_tokens += tin + tout
+        total_calls  += 1
+
+        if day == today_str:
+            cost_today  += cost
+            calls_today += 1
+
+        if model not in by_model:
+            by_model[model] = {'cost_usd': 0.0, 'tokens_in': 0, 'tokens_out': 0, 'calls': 0}
+        by_model[model]['cost_usd']   += cost
+        by_model[model]['tokens_in']  += tin
+        by_model[model]['tokens_out'] += tout
+        by_model[model]['calls']      += 1
+
+        if endpoint not in by_endpoint:
+            by_endpoint[endpoint] = {'cost_usd': 0.0, 'calls': 0}
+        by_endpoint[endpoint]['cost_usd'] += cost
+        by_endpoint[endpoint]['calls']    += 1
+
+        if day >= cutoff_30d:
+            key = (day, model)
+            daily_dict[key] = daily_dict.get(key, 0) + cost
+
+    daily_list = [
+        {'date': d, 'model': m, 'cost_usd': round(c, 6)}
+        for (d, m), c in sorted(daily_dict.items())
+    ]
+
+    recent_list = [
+        {
+            'timestamp':     r.get('timestamp'),
+            'model':         r.get('model'),
+            'endpoint':      r.get('endpoint'),
+            'tokens_input':  r.get('tokens_input'),
+            'tokens_output': r.get('tokens_output'),
+            'cost_usd':      round(r.get('cost_usd', 0), 6),
         }
+        for r in rows[:50]
+    ]
+
+    return {
+        'totals': {
+            'total_usd':    round(total_cost, 6),
+            'total_tokens': total_tokens,
+            'total_calls':  total_calls,
+        },
+        'today': {
+            'cost_today':  round(cost_today, 6),
+            'calls_today': calls_today,
+        },
+        'by_model': [
+            {'model': m, 'cost_usd': round(v['cost_usd'], 6),
+             'tokens_in': v['tokens_in'], 'tokens_out': v['tokens_out'], 'calls': v['calls']}
+            for m, v in sorted(by_model.items(), key=lambda x: -x[1]['cost_usd'])
+        ],
+        'by_endpoint': [
+            {'endpoint': ep, 'cost_usd': round(v['cost_usd'], 6), 'calls': v['calls']}
+            for ep, v in sorted(by_endpoint.items(), key=lambda x: -x[1]['cost_usd'])
+        ],
+        'daily':   daily_list,
+        'recent':  recent_list,
+        'pricing': PRICING,
+    }
+
+
+def _fetch_all_rows() -> list:
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return []
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            r = client.get(
+                f"{SUPABASE_URL}/rest/v1/{TABLE}",
+                headers={**_read_headers(), "Range": "0-4999"},
+                params={"select": "*", "order": "id.desc"},
+            )
+            return r.json() if r.status_code == 200 else []
+    except Exception as e:
+        logger.error(f"[costs_tracker] Error al obtener datos: {e}")
+        return []
+
+
+def _empty_summary() -> dict:
+    return {
+        'totals':      {'total_usd': 0.0, 'total_tokens': 0, 'total_calls': 0},
+        'today':       {'cost_today': 0.0, 'calls_today': 0},
+        'by_model':    [],
+        'by_endpoint': [],
+        'daily':       [],
+        'recent':      [],
+        'pricing':     PRICING,
+    }
+
+
+def init_db():
+    """No-op: mantenido por compatibilidad con omni_app.py. La tabla se crea en Supabase."""
+    pass

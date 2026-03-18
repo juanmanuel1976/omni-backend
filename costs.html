@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crisalia · Monitor de Costos LLM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0A0910; }
+        .card { background-color: #111827; border: 1px solid rgba(255,255,255,0.08); border-radius: 1rem; }
+        .stat-value { font-size: 2rem; font-weight: 800; letter-spacing: -0.05em; }
+        .model-gemini  { color: #4285F4; }
+        .model-deepseek { color: #34A853; }
+        .model-claude  { color: #D48105; }
+        .dot-gemini   { background: #4285F4; }
+        .dot-deepseek { background: #34A853; }
+        .dot-claude   { background: #D48105; }
+        .badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 9999px; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em; }
+    </style>
+</head>
+<body class="text-gray-300 min-h-screen">
+
+    <!-- HEADER -->
+    <header class="border-b border-gray-800 bg-black/40 backdrop-blur sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <a href="https://www.crisalia.io" class="text-xl font-bold text-white tracking-tight">
+                    Crisalia<span class="text-violet-500">.</span>
+                </a>
+                <span class="text-gray-600">/</span>
+                <span class="text-sm text-gray-400 font-medium">Monitor de Costos LLM</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span id="last-update" class="text-xs text-gray-500"></span>
+                <button onclick="loadData()" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg transition-colors">
+                    ↻ Actualizar
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-6 py-8 space-y-8">
+
+        <!-- ERROR BANNER -->
+        <div id="error-banner" class="hidden bg-red-900/30 border border-red-700/50 rounded-lg px-4 py-3 text-sm text-red-300"></div>
+
+        <!-- LOADING -->
+        <div id="loading" class="flex items-center justify-center py-24">
+            <div class="text-center space-y-3">
+                <div class="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                <p class="text-gray-500 text-sm">Cargando datos de costos...</p>
+            </div>
+        </div>
+
+        <!-- CONTENIDO PRINCIPAL (oculto hasta cargar) -->
+        <div id="content" class="hidden space-y-8">
+
+            <!-- KPI CARDS -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="card p-5">
+                    <p class="text-xs text-gray-500 uppercase tracking-widest mb-2">Gasto Total</p>
+                    <p id="kpi-total" class="stat-value text-white">$0.000000</p>
+                    <p class="text-xs text-gray-500 mt-1">acumulado histórico</p>
+                </div>
+                <div class="card p-5">
+                    <p class="text-xs text-gray-500 uppercase tracking-widest mb-2">Gasto Hoy</p>
+                    <p id="kpi-today" class="stat-value text-violet-400">$0.000000</p>
+                    <p id="kpi-calls-today" class="text-xs text-gray-500 mt-1">0 llamadas hoy</p>
+                </div>
+                <div class="card p-5">
+                    <p class="text-xs text-gray-500 uppercase tracking-widest mb-2">Llamadas Totales</p>
+                    <p id="kpi-calls" class="stat-value text-white">0</p>
+                    <p class="text-xs text-gray-500 mt-1">a todos los modelos</p>
+                </div>
+                <div class="card p-5">
+                    <p class="text-xs text-gray-500 uppercase tracking-widest mb-2">Costo Promedio</p>
+                    <p id="kpi-avg" class="stat-value text-white">$0.000000</p>
+                    <p class="text-xs text-gray-500 mt-1">por llamada</p>
+                </div>
+            </div>
+
+            <!-- CHARTS ROW -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                <!-- Evolución diaria (ocupa 2 columnas) -->
+                <div class="card p-6 lg:col-span-2">
+                    <h2 class="text-sm font-semibold text-white mb-1">Gasto Diario por Modelo</h2>
+                    <p class="text-xs text-gray-500 mb-5">Últimos 30 días — USD</p>
+                    <div class="h-56">
+                        <canvas id="chart-daily"></canvas>
+                    </div>
+                </div>
+
+                <!-- Distribución por modelo -->
+                <div class="card p-6">
+                    <h2 class="text-sm font-semibold text-white mb-1">Distribución por Modelo</h2>
+                    <p class="text-xs text-gray-500 mb-5">% del gasto total</p>
+                    <div class="h-40">
+                        <canvas id="chart-models"></canvas>
+                    </div>
+                    <div id="model-legend" class="mt-4 space-y-2"></div>
+                </div>
+            </div>
+
+            <!-- ENDPOINTS + TABLA -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                <!-- Gasto por endpoint -->
+                <div class="card p-6">
+                    <h2 class="text-sm font-semibold text-white mb-1">Gasto por Endpoint</h2>
+                    <p class="text-xs text-gray-500 mb-5">Costo acumulado — USD</p>
+                    <div class="h-48">
+                        <canvas id="chart-endpoints"></canvas>
+                    </div>
+                </div>
+
+                <!-- Tabla de últimas llamadas -->
+                <div class="card p-6 lg:col-span-2">
+                    <h2 class="text-sm font-semibold text-white mb-4">Últimas Llamadas</h2>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs">
+                            <thead>
+                                <tr class="text-gray-500 border-b border-gray-800">
+                                    <th class="text-left pb-2 font-medium">Hora</th>
+                                    <th class="text-left pb-2 font-medium">Modelo</th>
+                                    <th class="text-left pb-2 font-medium">Endpoint</th>
+                                    <th class="text-right pb-2 font-medium">Tokens IN</th>
+                                    <th class="text-right pb-2 font-medium">Tokens OUT</th>
+                                    <th class="text-right pb-2 font-medium">Costo</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recent-table" class="divide-y divide-gray-800/50"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PRICING REFERENCE -->
+            <div class="card p-6">
+                <h2 class="text-sm font-semibold text-white mb-4">Precios de Referencia</h2>
+                <div id="pricing-table" class="grid grid-cols-1 sm:grid-cols-3 gap-4"></div>
+                <p class="text-xs text-gray-600 mt-4">* Precios estimados en USD por 1M tokens. Actualizar en <code class="text-gray-500">costs_tracker.py → PRICING</code></p>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+    const API_BASE = 'https://omni-backend-dev.onrender.com';
+
+    const CHART_DEFAULTS = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: '#1F2937',
+                titleColor: '#E5E7EB',
+                bodyColor: '#D1D5DB',
+                padding: 10,
+                cornerRadius: 6,
+                callbacks: {
+                    label: ctx => ` $${ctx.parsed.y !== undefined ? ctx.parsed.y.toFixed(6) : ctx.parsed.toFixed(6)}`
+                }
+            }
+        }
+    };
+
+    const MODEL_COLORS = {
+        gemini:   '#4285F4',
+        deepseek: '#34A853',
+        claude:   '#D48105',
+    };
+
+    let charts = {};
+
+    function destroyCharts() {
+        Object.values(charts).forEach(c => c.destroy());
+        charts = {};
+    }
+
+    async function loadData() {
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('content').classList.add('hidden');
+        document.getElementById('error-banner').classList.add('hidden');
+
+        try {
+            const res = await fetch(`${API_BASE}/api/costs/summary`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+
+            document.getElementById('last-update').textContent =
+                'Actualizado: ' + new Date().toLocaleTimeString('es-AR');
+
+            renderKPIs(data);
+            renderDailyChart(data.daily);
+            renderModelChart(data.by_model);
+            renderEndpointChart(data.by_endpoint);
+            renderRecentTable(data.recent);
+            renderPricing(data.pricing);
+
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('content').classList.remove('hidden');
+
+        } catch (e) {
+            document.getElementById('loading').classList.add('hidden');
+            const banner = document.getElementById('error-banner');
+            banner.textContent = `Error al conectar con la API: ${e.message}`;
+            banner.classList.remove('hidden');
+        }
+    }
+
+    function renderKPIs(data) {
+        const t = data.totals;
+        const total = t.total_usd || 0;
+        const calls = t.total_calls || 0;
+        document.getElementById('kpi-total').textContent = '$' + total.toFixed(6);
+        document.getElementById('kpi-today').textContent = '$' + (data.today.cost_today || 0).toFixed(6);
+        document.getElementById('kpi-calls-today').textContent = (data.today.calls_today || 0) + ' llamadas hoy';
+        document.getElementById('kpi-calls').textContent = calls.toLocaleString('es-AR');
+        document.getElementById('kpi-avg').textContent = calls > 0
+            ? '$' + (total / calls).toFixed(6)
+            : '$0.000000';
+    }
+
+    function renderDailyChart(daily) {
+        // Construir datasets por modelo
+        const dates = [...new Set(daily.map(d => d.date))].sort();
+        const models = ['gemini', 'deepseek', 'claude'];
+
+        const datasets = models.map(model => {
+            const dataMap = {};
+            daily.filter(d => d.model === model).forEach(d => { dataMap[d.date] = d.cost_usd; });
+            return {
+                label: model,
+                data: dates.map(d => dataMap[d] || 0),
+                borderColor: MODEL_COLORS[model],
+                backgroundColor: MODEL_COLORS[model] + '22',
+                fill: true,
+                tension: 0.4,
+                pointRadius: 3,
+            };
+        });
+
+        const ctx = document.getElementById('chart-daily');
+        if (charts.daily) charts.daily.destroy();
+        charts.daily = new Chart(ctx, {
+            type: 'line',
+            data: { labels: dates, datasets },
+            options: {
+                ...CHART_DEFAULTS,
+                scales: {
+                    x: { ticks: { color: '#6B7280', font: { size: 10 } }, grid: { color: '#1F2937' } },
+                    y: { ticks: { color: '#6B7280', font: { size: 10 }, callback: v => '$' + v.toFixed(4) }, grid: { color: '#1F2937' } }
+                },
+                plugins: { ...CHART_DEFAULTS.plugins, legend: { display: true, labels: { color: '#9CA3AF', font: { size: 11 } } } }
+            }
+        });
+    }
+
+    function renderModelChart(byModel) {
+        const labels = byModel.map(m => m.model);
+        const values = byModel.map(m => m.cost_usd);
+        const colors = labels.map(l => MODEL_COLORS[l] || '#6B7280');
+        const total = values.reduce((a, b) => a + b, 0);
+
+        const ctx = document.getElementById('chart-models');
+        if (charts.models) charts.models.destroy();
+        charts.models = new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels, datasets: [{ data: values, backgroundColor: colors, borderColor: '#111827', borderWidth: 3 }] },
+            options: { ...CHART_DEFAULTS, cutout: '72%' }
+        });
+
+        // Leyenda custom
+        const legend = document.getElementById('model-legend');
+        legend.innerHTML = byModel.map(m => `
+            <div class="flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full" style="background:${MODEL_COLORS[m.model] || '#6B7280'}"></span>
+                    <span class="text-gray-300 capitalize">${m.model}</span>
+                </div>
+                <div class="text-right">
+                    <span class="text-gray-200 font-medium">$${(m.cost_usd || 0).toFixed(6)}</span>
+                    <span class="text-gray-600 ml-2">${total > 0 ? ((m.cost_usd / total) * 100).toFixed(1) : 0}%</span>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function renderEndpointChart(byEndpoint) {
+        const labels = byEndpoint.map(e => e.endpoint.replace('/api/', ''));
+        const values = byEndpoint.map(e => e.cost_usd);
+
+        const ctx = document.getElementById('chart-endpoints');
+        if (charts.endpoints) charts.endpoints.destroy();
+        charts.endpoints = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    data: values,
+                    backgroundColor: '#7C3AED88',
+                    borderColor: '#7C3AED',
+                    borderWidth: 1,
+                    borderRadius: 4,
+                }]
+            },
+            options: {
+                ...CHART_DEFAULTS,
+                indexAxis: 'y',
+                scales: {
+                    x: { ticks: { color: '#6B7280', font: { size: 10 }, callback: v => '$' + v.toFixed(4) }, grid: { color: '#1F2937' } },
+                    y: { ticks: { color: '#9CA3AF', font: { size: 10 } }, grid: { display: false } }
+                }
+            }
+        });
+    }
+
+    function renderRecentTable(recent) {
+        const tbody = document.getElementById('recent-table');
+        if (!recent || recent.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-600 py-6">Sin registros aún</td></tr>';
+            return;
+        }
+        tbody.innerHTML = recent.map(r => {
+            const ts = new Date(r.timestamp).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const dot = `<span class="w-2 h-2 rounded-full inline-block dot-${r.model}"></span>`;
+            return `
+                <tr class="hover:bg-white/5 transition-colors">
+                    <td class="py-2 text-gray-500">${ts}</td>
+                    <td class="py-2">${dot} <span class="model-${r.model} font-medium capitalize">${r.model}</span></td>
+                    <td class="py-2 text-gray-400">${r.endpoint}</td>
+                    <td class="py-2 text-right text-gray-400">${(r.tokens_input || 0).toLocaleString()}</td>
+                    <td class="py-2 text-right text-gray-400">${(r.tokens_output || 0).toLocaleString()}</td>
+                    <td class="py-2 text-right font-mono text-gray-200">$${(r.cost_usd || 0).toFixed(6)}</td>
+                </tr>`;
+        }).join('');
+    }
+
+    function renderPricing(pricing) {
+        const container = document.getElementById('pricing-table');
+        if (!pricing) return;
+        container.innerHTML = Object.entries(pricing).map(([model, p]) => `
+            <div class="bg-gray-900/60 rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="w-3 h-3 rounded-full" style="background:${MODEL_COLORS[model] || '#6B7280'}"></span>
+                    <span class="font-semibold text-white capitalize">${model}</span>
+                </div>
+                <div class="space-y-1 text-xs text-gray-400">
+                    <div class="flex justify-between"><span>Input</span><span class="font-mono text-gray-200">$${p.input}/1M</span></div>
+                    <div class="flex justify-between"><span>Output</span><span class="font-mono text-gray-200">$${p.output}/1M</span></div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // Cargar al iniciar y auto-refrescar cada 5 minutos
+    loadData();
+    setInterval(loadData, 5 * 60 * 1000);
+    </script>
+</body>
+</html>
