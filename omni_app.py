@@ -290,7 +290,7 @@ async def call_ai_model_no_stream(model_name: str, prompt: str, timeout: float =
                 if r.status_code != 200: return f"Error HTTP {r.status_code}: {r.text}"
                 data = r.json()
                 usage = data.get("usageMetadata", {})
-                costs_tracker.log_cost("gemini", endpoint, usage.get("promptTokenCount", 0), usage.get("candidatesTokenCount", 0))
+                await costs_tracker.log_cost("gemini", endpoint, usage.get("promptTokenCount", 0), usage.get("candidatesTokenCount", 0))
                 return data["candidates"][0]["content"]["parts"][0]["text"]
             elif model_name == "deepseek":
                 if not DEEPSEEK_API_KEY: return "Error: DEEPSEEK_API_KEY no configurada."
@@ -300,13 +300,13 @@ async def call_ai_model_no_stream(model_name: str, prompt: str, timeout: float =
                 if r.status_code != 200: return f"Error HTTP {r.status_code}: {r.text}"
                 data = r.json()
                 usage = data.get("usage", {})
-                costs_tracker.log_cost("deepseek", endpoint, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+                await costs_tracker.log_cost("deepseek", endpoint, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
                 return data["choices"][0]["message"]["content"]
             elif model_name == "claude":
                 if not ANTHROPIC_API_KEY: return "Error: ANTHROPIC_API_KEY no configurada."
                 client_anthropic = AsyncAnthropic(api_key=ANTHROPIC_API_KEY, timeout=360.0)
                 msg = await client_anthropic.messages.create(model="claude-3-haiku-20240307", max_tokens=4069, messages=[{"role": "user", "content": prompt}])
-                costs_tracker.log_cost("claude", endpoint, msg.usage.input_tokens, msg.usage.output_tokens)
+                await costs_tracker.log_cost("claude", endpoint, msg.usage.input_tokens, msg.usage.output_tokens)
                 return msg.content[0].text
     except Exception as e:
         return f"Error en {model_name}: {e}"
@@ -899,7 +899,7 @@ async def get_agent_status():
 async def get_costs_summary():
     """Retorna el resumen completo de costos LLM para el dashboard en div.crisalia.io"""
     try:
-        return costs_tracker.get_summary()
+        return await costs_tracker.get_summary()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener costos: {str(e)}")
 

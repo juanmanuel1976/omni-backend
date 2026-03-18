@@ -45,7 +45,7 @@ def calc_cost(model: str, tokens_input: int, tokens_output: int) -> float:
     return (tokens_input * pricing['input'] + tokens_output * pricing['output']) / 1_000_000
 
 
-def log_cost(model: str, endpoint: str, tokens_input: int, tokens_output: int) -> float:
+async def log_cost(model: str, endpoint: str, tokens_input: int, tokens_output: int) -> float:
     cost = calc_cost(model, tokens_input, tokens_output)
     if not SUPABASE_URL or not SUPABASE_KEY:
         logger.warning("[costs_tracker] Supabase no configurado — costo no guardado.")
@@ -59,8 +59,8 @@ def log_cost(model: str, endpoint: str, tokens_input: int, tokens_output: int) -
             "tokens_output": tokens_output,
             "cost_usd":      round(cost, 8),
         }
-        with httpx.Client(timeout=5.0) as client:
-            client.post(
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(
                 f"{SUPABASE_URL}/rest/v1/{TABLE}",
                 headers=_write_headers(),
                 json=payload,
@@ -70,7 +70,7 @@ def log_cost(model: str, endpoint: str, tokens_input: int, tokens_output: int) -
     return cost
 
 
-def get_summary() -> dict:
+async def get_summary() -> dict:
     """
     Retorna el resumen agregado de costos para el dashboard.
 
@@ -79,7 +79,7 @@ def get_summary() -> dict:
     y agrega en Python. Migrar a VIEW o función RPC en Supabase cuando el
     volumen de registros supere los 10.000.
     """
-    rows = _fetch_all_rows()
+    rows = await _fetch_all_rows()
     if not rows:
         return _empty_summary()
 
@@ -171,12 +171,12 @@ def get_summary() -> dict:
     }
 
 
-def _fetch_all_rows() -> list:
+async def _fetch_all_rows() -> list:
     if not SUPABASE_URL or not SUPABASE_KEY:
         return []
     try:
-        with httpx.Client(timeout=10.0) as client:
-            r = client.get(
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(
                 f"{SUPABASE_URL}/rest/v1/{TABLE}",
                 headers={**_read_headers(), "Range": "0-4999"},
                 params={"select": "*", "order": "id.desc"},
