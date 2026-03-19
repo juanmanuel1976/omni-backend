@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es" class="scroll-smooth">
+<html lang="en" class="scroll-smooth">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -46,6 +46,7 @@
         .fade-in { animation: fadeIn 0.5s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .mode-selector input:checked + label { background-color: #7C3AED; color: #ffffff; border-color: #7C3AED; font-weight: 500; }
+        .confidence-selector input:checked + label { background-color: #7C3AED; color: #ffffff; border-color: #7C3AED; font-weight: 500; }
         #file-uploader { display: none; }
         .cursor-blink::after { content: '|'; animation: blink 1.2s infinite steps(1); }
         @keyframes blink { 50% { opacity: 0; } }
@@ -63,8 +64,16 @@
         .timeline-step.completed .step-line { background-color: #065F46; }
         .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+        .lang-switcher-btn {
+          background: none; border: none; cursor: pointer;
+          color: #6B7280; font-size: 12px; font-weight: 600; letter-spacing: 1px;
+          padding: 4px 6px; border-radius: 4px; transition: color 0.2s;
+        }
+        .lang-switcher-btn:hover { color: #fff; }
+        .lang-switcher-btn.active-lang { color: #fff; background: rgba(124,58,237,0.3); }
     </style>
-    
+    <script src="translations.js"></script>
+
     <script>
         if (typeof pdfjsLib !== 'undefined') {
             pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js`;
@@ -136,7 +145,12 @@
                     Crisalia<span class="text-violet-500">.</span>
                 </a>
                 <div class="flex items-center space-x-4">
-                    <a href="#features" class="text-sm font-medium text-gray-400 hover:text-white transition-colors">Características</a>
+                    <a href="#features" class="text-sm font-medium text-gray-400 hover:text-white transition-colors" data-i18n="nav.features">Features</a>
+                    <div class="flex items-center gap-1 text-sm">
+                        <button class="lang-switcher-btn" data-lang="en" onclick="setLanguage('en')">EN</button>
+                        <span class="text-gray-600">|</span>
+                        <button class="lang-switcher-btn" data-lang="es" onclick="setLanguage('es')">ES</button>
+                    </div>
                     <button id="theme-toggle" class="p-2 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -149,20 +163,16 @@
 
     <main class="container mx-auto max-w-5xl px-4 py-8">
         <section class="text-center py-12 hero-gradient">
-            <h1 class="text-4xl md:text-5xl font-extrabold tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-white to-gray-400 mb-4">
-                Inteligencia Sintetizada para Decisiones Críticas
-            </h1>
-            <p class="text-lg text-gray-400 max-w-3xl mx-auto">
-                Crisalia no te da una respuesta, te entrega una estrategia. Orquestamos un panel de IAs expertas para generar insights robustos, transparentes y libres del sesgo de un modelo único.
-            </p>
+            <h1 class="text-4xl md:text-5xl font-extrabold tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-white to-gray-400 mb-4" data-i18n="app.hero.title">Synthesized Intelligence for Critical Decisions</h1>
+            <p class="text-lg text-gray-400 max-w-3xl mx-auto" data-i18n="app.hero.subtitle">Crisalia doesn't give you an answer — it delivers a strategy. We orchestrate a panel of expert AIs to generate insights that are robust, transparent, and free from single-model bias.</p>
         </section>
 
         <section id="step1" class="card-glow p-8 mb-8">
-            <h2 id="step1-title" class="text-xl font-semibold mb-6 text-center text-white">1. Proporciona Contenido para Análisis</h2>
+            <h2 id="step1-title" class="text-xl font-semibold mb-6 text-center text-white" data-i18n="step1.title">1. Provide Content for Analysis</h2>
             <div class="mb-6">
                 <label for="file-uploader" class="w-full text-center cursor-pointer bg-gray-900 hover:bg-gray-800 border-2 border-dashed border-gray-700 rounded-lg p-6 block transition">
-                    <span class="text-gray-300 font-semibold">Seleccione los documentos para el análisis (.txt, .md, .pdf)</span>
-                    <span class="text-gray-500 text-sm block mt-1">o arrastre y suelte los archivos aquí</span>
+                    <span class="text-gray-300 font-semibold" data-i18n="step1.file_label">Select documents for analysis (.txt, .md, .pdf)</span>
+                    <span class="text-gray-500 text-sm block mt-1" data-i18n="step1.file_drag">or drag and drop files here</span>
                 </label>
                 <input type="file" id="file-uploader" accept=".txt,.md,.text/plain,.pdf" multiple>
                 <div id="file-list-display" class="text-left text-sm text-gray-400 mt-4"></div>
@@ -172,20 +182,20 @@
                     <div class="w-full border-t border-gray-700"></div>
                 </div>
                 <div class="relative flex justify-center">
-                    <span class="bg-[#111827] px-3 text-sm text-gray-500">O</span>
+                    <span class="bg-[#111827] px-3 text-sm text-gray-500" data-i18n="step1.divider">OR</span>
                 </div>
             </div>
-            <textarea id="prompt-input" placeholder="Pega el texto directamente aquí..." class="w-full h-40 p-4 bg-gray-900 border border-gray-700 text-gray-300 rounded-lg resize-y focus:ring-2 focus:ring-violet-500 focus:border-transparent"></textarea>
+            <textarea id="prompt-input" data-i18n="step1.textarea_placeholder" placeholder="Paste text directly here..." class="w-full h-40 p-4 bg-gray-900 border border-gray-700 text-gray-300 rounded-lg resize-y focus:ring-2 focus:ring-violet-500 focus:border-transparent"></textarea>
             
             <div class="mt-6">
-                <label class="text-sm font-medium text-gray-400 mb-3 block">Metodología de Análisis:</label>
+                <label class="text-sm font-medium text-gray-400 mb-3 block" data-i18n="step1.method_label">Analysis Methodology:</label>
                 <div class="mode-selector flex flex-col sm:flex-row bg-gray-900 rounded-lg p-1 border border-gray-700">
                     <input type="radio" id="mode-direct" name="analysisMode" value="direct" class="sr-only" checked>
-                    <label for="mode-direct" class="flex-1 text-center cursor-pointer text-gray-400 text-sm py-2 px-4 rounded-md border border-transparent transition-colors" title="Genera una respuesta directa y concisa, ideal para datos rápidos.">Análisis Conciso</label>
+                    <label for="mode-direct" class="flex-1 text-center cursor-pointer text-gray-400 text-sm py-2 px-4 rounded-md border border-transparent transition-colors" title="Generates a direct and concise response, ideal for quick data." data-i18n="step1.mode_direct">Concise Analysis</label>
                     <input type="radio" id="mode-perspectives" name="analysisMode" value="perspectives" class="sr-only">
-                    <label for="mode-perspectives" class="flex-1 text-center cursor-pointer text-gray-400 text-sm py-2 px-4 rounded-md border border-transparent transition-colors" title="Desarrolla múltiples perspectivas y explora matices, ideal para investigación profunda.">Análisis Exhaustivo</label>
+                    <label for="mode-perspectives" class="flex-1 text-center cursor-pointer text-gray-400 text-sm py-2 px-4 rounded-md border border-transparent transition-colors" title="Develops multiple perspectives and explores nuances, ideal for deep research." data-i18n="step1.mode_perspectives">Comprehensive Analysis</label>
                     <input type="radio" id="mode-debate" name="analysisMode" value="debate" class="sr-only">
-                    <label for="mode-debate" class="flex-1 text-center cursor-pointer text-gray-200 text-sm py-2 px-4 rounded-md border border-transparent transition-colors font-semibold" title="Somete las perspectivas a un examen cruzado para forjar una síntesis más robusta y validada.">Análisis Dialéctico</label>
+                    <label for="mode-debate" class="flex-1 text-center cursor-pointer text-gray-200 text-sm py-2 px-4 rounded-md border border-transparent transition-colors font-semibold" title="Subjects perspectives to cross-examination to forge a more robust and validated synthesis." data-i18n="step1.mode_debate">Dialectical Analysis</label>
                 </div>
                 <div id="mode-description" class="text-center text-xs text-gray-500 mt-3 min-h-[2.5em] px-2"></div>
             </div>
@@ -196,59 +206,57 @@
                     <svg class="w-5 h-5 mr-2 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    Configuración del Análisis Dialéctico
+                    <span data-i18n="dialectic.title">Dialectical Analysis Settings</span>
                 </h3>
-                
+
                 <div class="mb-4">
-                    <label class="text-sm font-medium text-gray-300 mb-3 block">Nivel de Confianza Deseado:</label>
+                    <label class="text-sm font-medium text-gray-300 mb-3 block" data-i18n="dialectic.confidence_label">Desired Confidence Level:</label>
                     <div class="confidence-selector grid grid-cols-1 sm:grid-cols-3 gap-2 bg-gray-900 rounded-lg p-1 border border-gray-700">
                         <input type="radio" id="confidence-exploratory" name="confidenceLevel" value="exploratory" class="sr-only" checked>
-                        <label for="confidence-exploratory" class="text-center cursor-pointer text-gray-400 text-sm py-2 px-3 rounded-md border border-transparent transition-colors" title="Acepta mayor diversidad de opiniones (>60% consenso)">
-                            <div class="font-medium">Exploratorio</div>
-                            <div class="text-xs text-gray-500">>60% consenso</div>
+                        <label for="confidence-exploratory" class="text-center cursor-pointer text-gray-400 text-sm py-2 px-3 rounded-md border border-transparent transition-colors" title="Accepts greater diversity of opinions (>60% consensus)">
+                            <div class="font-medium" data-i18n="dialectic.exploratory">Exploratory</div>
+                            <div class="text-xs text-gray-500" data-i18n="dialectic.exploratory_sub">&gt;60% consensus</div>
                         </label>
-                        
+
                         <input type="radio" id="confidence-balanced" name="confidenceLevel" value="balanced" class="sr-only">
-                        <label for="confidence-balanced" class="text-center cursor-pointer text-gray-400 text-sm py-2 px-3 rounded-md border border-transparent transition-colors" title="Balance entre consenso y diversidad (>70% consenso)">
-                            <div class="font-medium">Equilibrado</div>
-                            <div class="text-xs text-gray-500">>70% consenso</div>
+                        <label for="confidence-balanced" class="text-center cursor-pointer text-gray-400 text-sm py-2 px-3 rounded-md border border-transparent transition-colors" title="Balance between consensus and diversity (>70% consensus)">
+                            <div class="font-medium" data-i18n="dialectic.balanced">Balanced</div>
+                            <div class="text-xs text-gray-500" data-i18n="dialectic.balanced_sub">&gt;70% consensus</div>
                         </label>
-                        
+
                         <input type="radio" id="confidence-conservative" name="confidenceLevel" value="conservative" class="sr-only">
-                        <label for="confidence-conservative" class="text-center cursor-pointer text-gray-400 text-sm py-2 px-3 rounded-md border border-transparent transition-colors" title="Prioriza alto consenso y certeza (>80% consenso)">
-                            <div class="font-medium">Conservador</div>
-                            <div class="text-xs text-gray-500">>80% consenso</div>
+                        <label for="confidence-conservative" class="text-center cursor-pointer text-gray-400 text-sm py-2 px-3 rounded-md border border-transparent transition-colors" title="Prioritizes high consensus and certainty (>80% consensus)">
+                            <div class="font-medium" data-i18n="dialectic.conservative">Conservative</div>
+                            <div class="text-xs text-gray-500" data-i18n="dialectic.conservative_sub">&gt;80% consensus</div>
                         </label>
                     </div>
                 </div>
 
-                <div class="text-sm text-gray-400 bg-gray-900/50 p-3 rounded-md border border-gray-700">
-                    <strong class="text-violet-300">Nota:</strong> Si el consenso inicial no alcanza tu nivel deseado, el sistema sugerirá automáticamente prompts de refinamiento para mejorar la convergencia entre los modelos de IA.
-                </div>
+                <div class="text-sm text-gray-400 bg-gray-900/50 p-3 rounded-md border border-gray-700" data-i18n="dialectic.note"><strong class="text-violet-300">Note:</strong> If the initial consensus does not reach your desired level, the system will automatically suggest refinement prompts to improve convergence between AI models.</div>
             </div>
 
-            <button id="generate-btn" class="mt-6 w-full px-6 py-3 bg-violet-600 text-white font-bold rounded-lg hover:bg-violet-700 disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors duration-300 text-base">Iniciar Análisis</button>
+            <button id="generate-btn" class="mt-6 w-full px-6 py-3 bg-violet-600 text-white font-bold rounded-lg hover:bg-violet-700 disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors duration-300 text-base" data-i18n="step1.generate_btn">Start Analysis</button>
         </section>
 
         <section id="process-timeline-container" class="hidden card-glow p-6 mb-8 fade-in">
-            <h2 class="text-xl font-semibold mb-6 text-center text-white">Fases del Análisis</h2>
+            <h2 class="text-xl font-semibold mb-6 text-center text-white" data-i18n="timeline.title">Analysis Phases</h2>
             <div id="process-timeline" class="timeline">
-                <div class="timeline-step" data-step="1"><div class="step-circle">1</div><div class="step-label">Consulta</div><div class="step-line"></div></div>
-                <div class="timeline-step" data-step="2"><div class="step-circle">2</div><div class="step-label">Análisis Individual</div><div class="step-line"></div></div>
-                <div class="timeline-step" data-step="3"><div class="step-circle">3</div><div class="step-label">Debate / Síntesis</div><div class="step-line"></div></div>
-                <div class="timeline-step" data-step="4"><div class="step-circle">✓</div><div class="step-label">Resultado Final</div></div>
+                <div class="timeline-step" data-step="1"><div class="step-circle">1</div><div class="step-label" data-i18n="timeline.step1">Query</div><div class="step-line"></div></div>
+                <div class="timeline-step" data-step="2"><div class="step-circle">2</div><div class="step-label" data-i18n="timeline.step2">Individual Analysis</div><div class="step-line"></div></div>
+                <div class="timeline-step" data-step="3"><div class="step-circle">3</div><div class="step-label" data-i18n="timeline.step3">Debate / Synthesis</div><div class="step-line"></div></div>
+                <div class="timeline-step" data-step="4"><div class="step-circle">✓</div><div class="step-label" data-i18n="timeline.step4">Final Result</div></div>
             </div>
         </section>
 
         <!-- Nueva sección para respuestas iniciales en modo dialéctico -->
         <section id="initial-responses-container" class="hidden card-glow p-6 mb-8 fade-in initial-responses-section">
-            <h2 class="text-xl font-semibold mb-4 text-center text-white">Respuestas Iniciales Individuales</h2>
-            <p class="text-center text-sm text-gray-400 mb-6">Revisa las perspectivas individuales antes del proceso dialéctico</p>
+            <h2 class="text-xl font-semibold mb-4 text-center text-white" data-i18n="initial.title">Individual Initial Responses</h2>
+            <p class="text-center text-sm text-gray-400 mb-6" data-i18n="initial.subtitle">Review individual perspectives before the dialectical process</p>
             <div id="initial-responses-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
         </section>
 
         <section id="consensus-container" class="hidden card-glow p-6 mb-8 fade-in">
-            <h2 class="text-xl font-semibold mb-4 text-center text-white">Nivel de Consenso Entre Modelos</h2>
+            <h2 class="text-xl font-semibold mb-4 text-center text-white" data-i18n="consensus.title">Consensus Level Between Models</h2>
             <div class="w-full bg-gray-800 rounded-full h-4">
                 <div id="consensus-bar" class="bg-violet-600 h-4 rounded-full transition-all duration-1000 ease-out" style="width: 0%"></div>
             </div>
@@ -258,36 +266,36 @@
         
         <!-- Sección mejorada de disidencias -->
         <section id="friction-container" class="hidden card-glow p-6 mb-8 border border-amber-500/30 fade-in" style="background: linear-gradient(to right, rgba(253, 230, 138, 0.05), rgba(124, 58, 237, 0.05))">
-            <h2 class="text-xl font-semibold mb-3 text-center text-amber-300">Puntos de Disidencia Detectados</h2>
-            <p class="text-center text-sm text-amber-400 mb-4">Los modelos de IA tienen perspectivas diferentes en estos aspectos:</p>
-            
+            <h2 class="text-xl font-semibold mb-3 text-center text-amber-300" data-i18n="friction.title">Detected Dissidence Points</h2>
+            <p class="text-center text-sm text-amber-400 mb-4" data-i18n="friction.subtitle">The AI models have different perspectives on these aspects:</p>
+
             <div id="dissidence-analysis" class="space-y-3 mb-6"></div>
-            
+
             <div class="border-t border-amber-500/30 pt-6">
-                <h3 class="text-lg font-semibold text-white mb-3">Prompts Sugeridos para Refinamiento</h3>
-                <p class="text-sm text-gray-400 mb-4">Selecciona y edita un prompt para dirigir el refinamiento del debate:</p>
+                <h3 class="text-lg font-semibold text-white mb-3" data-i18n="friction.suggested_title">Suggested Refinement Prompts</h3>
+                <p class="text-sm text-gray-400 mb-4" data-i18n="friction.suggested_subtitle">Select and edit a prompt to guide the refinement of the debate:</p>
                 <div id="suggested-prompts" class="space-y-3 mb-4"></div>
-                
+
                 <div class="mt-4">
-                    <label class="text-sm font-medium text-gray-300 mb-2 block">O escribe tu propio prompt de refinamiento:</label>
-                    <textarea id="custom-refinement-prompt" placeholder="Ej: 'Enfócate en la viabilidad económica y reduce las diferencias metodológicas...'" class="w-full h-20 p-3 bg-gray-900 border border-gray-700 text-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm"></textarea>
+                    <label class="text-sm font-medium text-gray-300 mb-2 block" data-i18n="friction.custom_label">Or write your own refinement prompt:</label>
+                    <textarea id="custom-refinement-prompt" data-i18n="friction.custom_placeholder" placeholder="E.g.: 'Focus on economic viability and reduce methodological differences...'" class="w-full h-20 p-3 bg-gray-900 border border-gray-700 text-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm"></textarea>
                 </div>
-                
-                <button id="refine-debate-btn" class="mt-3 w-full px-6 py-3 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-700 transition-colors">Refinar Debate</button>
+
+                <button id="refine-debate-btn" class="mt-3 w-full px-6 py-3 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-700 transition-colors" data-i18n="friction.refine_btn">Refine Debate</button>
             </div>
         </section>
 
         <section id="step2" class="hidden">
             <div id="step2-header" class="text-center mb-8">
-                <h2 class="text-2xl font-semibold mb-2 text-white">2. Revisa las Perspectivas</h2>
-                <p class="text-gray-400">Evalúa las perspectivas generadas. Tu selección guiará la síntesis final.</p>
+                <h2 class="text-2xl font-semibold mb-2 text-white" data-i18n="step2.title">2. Review Perspectives</h2>
+                <p class="text-gray-400" data-i18n="step2.subtitle">Evaluate the generated perspectives. Your selection will guide the final synthesis.</p>
             </div>
             <div id="responses-grid" class="grid grid-cols-1 md:grid-cols-3 gap-6"></div>
         </section>
 
         <section id="step3" class="hidden text-center mt-8 space-y-4 md:space-y-0 md:space-x-4">
-            <button id="refine-summary-btn" class="px-8 py-4 bg-gray-800 text-gray-200 font-semibold rounded-lg hover:bg-gray-700 disabled:bg-gray-900 transition-colors">Generar Puntos Clave</button>
-            <button id="refine-report-btn" class="px-8 py-4 bg-violet-600 text-white font-semibold rounded-lg hover:bg-violet-700 disabled:bg-gray-900 transition-colors">Desarrollar Síntesis Estratégica</button>
+            <button id="refine-summary-btn" class="px-8 py-4 bg-gray-800 text-gray-200 font-semibold rounded-lg hover:bg-gray-700 disabled:bg-gray-900 transition-colors" data-i18n="btn.key_points">Generate Key Points</button>
+            <button id="refine-report-btn" class="px-8 py-4 bg-violet-600 text-white font-semibold rounded-lg hover:bg-violet-700 disabled:bg-gray-900 transition-colors" data-i18n="btn.strategic_synthesis">Develop Strategic Synthesis</button>
         </section>
 
         <section id="final-result-container" class="hidden w-full mt-8">
@@ -295,19 +303,13 @@
         <div class="bg-[#111827] rounded-xl border border-gray-800 shadow-2xl overflow-hidden">
             <div class="px-8 py-6 border-b border-gray-800">
                 <div class="flex items-center justify-between">
-                    <h2 class="text-2xl font-bold text-white">Síntesis Estratégica Final</h2>
+                    <h2 class="text-2xl font-bold text-white" data-i18n="final.title">Final Strategic Synthesis</h2>
                     </div>
-                
+
                 <div class="flex space-x-8 mt-6 border-b border-gray-700">
-                    <button class="tab-button active pb-3 px-1 font-medium" data-tab="sintesis">
-                        Síntesis
-                    </button>
-                    <button class="tab-button pb-3 px-1 font-medium" data-tab="argumentos">
-                        Argumentos Finales
-                    </button>
-                    <button class="tab-button pb-3 px-1 font-medium" data-tab="historial">
-                        Historial de Análisis
-                    </button>
+                    <button class="tab-button active pb-3 px-1 font-medium" data-tab="sintesis" data-i18n="tab.synthesis">Synthesis</button>
+                    <button class="tab-button pb-3 px-1 font-medium" data-tab="argumentos" data-i18n="tab.arguments">Final Arguments</button>
+                    <button class="tab-button pb-3 px-1 font-medium" data-tab="historial" data-i18n="tab.history">Analysis History</button>
                 </div>
             </div>
             
@@ -333,15 +335,9 @@
                     <div id="analysis-metadata" class="text-sm text-gray-500">
                         </div>
                     <div class="flex space-x-3">
-                        <button id="copy-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-medium rounded-lg hover:bg-gray-700 transition-colors duration-300 text-sm">
-                            Copiar
-                        </button>
-                        <button id="download-txt-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-medium rounded-lg hover:bg-gray-700 transition-colors duration-300 text-sm">
-                            Exportar .txt
-                        </button>
-                        <button id="reuse-prompt-btn" class="px-6 py-2 bg-[#7C3AED] text-white font-semibold rounded-lg hover:bg-[#6D28D9] transition-colors duration-300 text-sm">
-                            Profundizar Análisis
-                        </button>
+                        <button id="copy-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-medium rounded-lg hover:bg-gray-700 transition-colors duration-300 text-sm" data-i18n="btn.copy">Copy</button>
+                        <button id="download-txt-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-medium rounded-lg hover:bg-gray-700 transition-colors duration-300 text-sm" data-i18n="btn.export_txt">Export .txt</button>
+                        <button id="reuse-prompt-btn" class="px-6 py-2 bg-[#7C3AED] text-white font-semibold rounded-lg hover:bg-[#6D28D9] transition-colors duration-300 text-sm" data-i18n="btn.deepen">Deepen Analysis</button>
                     </div>
                 </div>
             </div>
@@ -351,33 +347,33 @@
 
         <section id="features" class="card-glow p-8 mt-16">
             <div class="text-center mb-12">
-                <h2 class="text-sm font-bold uppercase tracking-widest text-violet-400 mb-2">PLATAFORMA</h2>
-                <p class="text-3xl md:text-4xl font-bold text-white">Un Toolkit para la Inteligencia Aumentada</p>
+                <h2 class="text-sm font-bold uppercase tracking-widest text-violet-400 mb-2" data-i18n="features.label">PLATFORM</h2>
+                <p class="text-3xl md:text-4xl font-bold text-white" data-i18n="features.title">A Toolkit for Augmented Intelligence</p>
             </div>
             
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div class="p-6 bg-gray-900 rounded-xl border border-gray-800">
                     <div class="flex items-center gap-4 mb-4">
                         <svg class="w-8 h-8 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-                        <h3 class="text-xl font-bold text-white">Métrica de Consenso Inteligente</h3>
+                        <h3 class="text-xl font-bold text-white" data-i18n="features.smart_consensus_title">Intelligent Consensus Metric</h3>
                     </div>
-                    <p class="text-gray-400">Sistema adaptativo que ajusta automáticamente el proceso según tu nivel de confianza deseado. Un bajo consenso activa prompts de refinamiento contextuales.</p>
+                    <p class="text-gray-400" data-i18n="features.smart_consensus_desc">Adaptive system that automatically adjusts the process according to your desired confidence level. Low consensus triggers contextual refinement prompts.</p>
                 </div>
 
                 <div class="p-6 bg-gray-900 rounded-xl border border-gray-800">
                     <div class="flex items-center gap-4 mb-4">
                         <svg class="w-8 h-8 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                        <h3 class="text-xl font-bold text-white">Análisis de Disidencias Automático</h3>
+                        <h3 class="text-xl font-bold text-white" data-i18n="features.dissidence_title">Automatic Dissidence Analysis</h3>
                     </div>
-                    <p class="text-gray-400">Identifica automáticamente puntos de divergencia conceptual entre modelos y genera prompts específicos para resolver diferencias metodológicas.</p>
+                    <p class="text-gray-400" data-i18n="features.dissidence_desc">Automatically identifies points of conceptual divergence between models and generates specific prompts to resolve methodological differences.</p>
                 </div>
 
                 <div class="p-6 bg-gray-900 rounded-xl border border-gray-800 lg:col-span-2">
                     <div class="flex items-center gap-4 mb-4">
                         <svg class="w-8 h-8 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
-                        <h3 class="text-xl font-bold text-white">Trazabilidad del Razonamiento</h3>
+                        <h3 class="text-xl font-bold text-white" data-i18n="features.trace_title">Reasoning Traceability</h3>
                     </div>
-                    <p class="text-gray-400 mb-6">Auditabilidad total. La síntesis final utiliza un código de colores para trazar cada idea hasta su modelo de origen, eliminando la "caja negra" del análisis.</p>
+                    <p class="text-gray-400 mb-6" data-i18n="features.trace_desc_app">Full auditability. The final synthesis uses color-coding to trace each idea back to its source model, eliminating the "black box" of analysis.</p>
                     <div class="p-4 bg-black/40 rounded-lg border border-gray-700 font-mono text-sm">
                         <p class="text-gray-300 leading-relaxed">
                             <span class="px-2 py-1 rounded source-gemini">El análisis de mercado sugiere una oportunidad de entrada en el sector de energía renovable.</span>
@@ -385,9 +381,9 @@
                             <span class="px-2 py-1 rounded source-claude">La síntesis recomienda una estrategia de adquisición focalizada en startups tecnológicas.</span>
                         </p>
                          <div class="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs">
-                            <span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#4285F4]"></span>Aporte: Gemini</span>
-                            <span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#34A853]"></span>Aporte: Deepseek</span>
-                            <span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#D48105]"></span>Aporte: Claude</span>
+                            <span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#4285F4]"></span><span data-i18n="features.source_gemini">Source: Gemini</span></span>
+                            <span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#34A853]"></span><span data-i18n="features.source_deepseek">Source: Deepseek</span></span>
+                            <span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#D48105]"></span><span data-i18n="features.source_claude">Source: Claude</span></span>
                         </div>
                     </div>
                 </div>
@@ -398,12 +394,12 @@
     <footer class="border-t border-gray-800 mt-16">
     <div class="container mx-auto max-w-5xl px-4 py-8">
         <div class="flex flex-col md:flex-row justify-between items-center">
-            <p class="text-sm text-gray-500">&copy; 2025 Crisalia - Mediacon SRL. Todos los derechos reservados.</p>
+            <p class="text-sm text-gray-500" data-i18n="footer.rights_app">© 2025 Crisalia - Mediacon SRL. All rights reserved.</p>
             <div class="flex space-x-6 mt-4 md:mt-0">
                 <a href="#" class="text-gray-500 hover:text-white transition-colors">Twitter</a>
                 <a href="#" class="text-gray-500 hover:text-white transition-colors">LinkedIn</a>
-                <button id="acknowledgments-btn" class="text-gray-500 hover:text-white transition-colors cursor-pointer">Agradecimientos</button>
-                <a href="#" class="text-gray-500 hover:text-white transition-colors">Contacto</a>
+                <button id="acknowledgments-btn" class="text-gray-500 hover:text-white transition-colors cursor-pointer" data-i18n="footer.acknowledgments">Acknowledgments</button>
+                <a href="#" class="text-gray-500 hover:text-white transition-colors" data-i18n="footer.contact">Contact</a>
             </div>
         </div>
     </div>
@@ -415,7 +411,7 @@
         <div class="p-6">
             <!-- Header -->
             <div class="flex items-center justify-between mb-6">
-                <h3 class="text-xl font-semibold text-white">Agradecimientos</h3>
+                <h3 class="text-xl font-semibold text-white" data-i18n="ack.title">Acknowledgments</h3>
                 <button id="close-acknowledgments" class="text-gray-400 hover:text-white transition-colors">
                     <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -425,13 +421,11 @@
             
             <!-- Contenido -->
             <div class="space-y-4 text-gray-300 text-sm">
-                <p class="text-white font-medium mb-4">
-                    CRISALIA fue posible gracias a la colaboración y apoyo de:
-                </p>
-                
+                <p class="text-white font-medium mb-4" data-i18n="ack.intro">CRISALIA was made possible thanks to the collaboration and support of:</p>
+
                 <div class="space-y-3">
                     <div>
-                        <h4 class="text-violet-400 font-medium mb-2">Equipo de Desarrollo</h4>
+                        <h4 class="text-violet-400 font-medium mb-2" data-i18n="ack.team_label">Development Team</h4>
                         <ul class="space-y-1 text-gray-400">
                             <li>• Lucas Cáceres</li>
                             <li>• Juan Martin Gené</li>
@@ -443,7 +437,7 @@
                     </div>
                     
                     <div>
-                        <h4 class="text-violet-400 font-medium mb-2">Instituciones</h4>
+                        <h4 class="text-violet-400 font-medium mb-2" data-i18n="ack.institutions_label">Institutions</h4>
                         <ul class="space-y-1 text-gray-400">
                             <li>• Biblioteca del Congreso de la Nación Argentina</li>
                         </ul>
@@ -451,9 +445,7 @@
                 </div>
                 
                 <div class="pt-4 border-t border-gray-700">
-                    <p class="text-xs text-gray-500 text-center">
-                        Su contribución fue fundamental para el desarrollo de esta tecnología.
-                    </p>
+                    <p class="text-xs text-gray-500 text-center" data-i18n="ack.footer">Their contribution was fundamental to the development of this technology.</p>
                 </div>
             </div>
         </div>
@@ -470,7 +462,7 @@
         if (window.jspdf && window.jspdf.jsPDF) {
             jsPDF = window.jspdf.jsPDF;
         }
-        window.API_BASE_URL = 'https://omni-backend-b9p2.onrender.com';
+        window.API_BASE_URL = 'https://omni-backend-dev.onrender.com';
         window.state = {}; // << Corrección principal para el error.
         var dom = {};
         var analysisTimeout;
@@ -512,8 +504,8 @@
                     </h3>
                     <div id="content-${model}" class="prose max-w-none text-sm min-h-[120px] text-gray-300">${initialContent}</div>
                     <div id="actions-${model}" class="flex items-center justify-end space-x-2 mt-4 hidden">
-                        <button data-model="${model}" data-action="highlight" class="action-btn px-3 py-1 text-xs font-semibold rounded-full bg-green-900/30 text-green-300 hover:bg-green-800/50 border border-green-800/50">Incluir en Síntesis</button>
-                        <button data-model="${model}" data-action="discard" class="action-btn px-3 py-1 text-xs font-semibold rounded-full bg-red-900/30 text-red-300 hover:bg-red-800/50 border border-red-800/50">Marcar como Contrapunto</button>
+                        <button data-model="${model}" data-action="highlight" class="action-btn px-3 py-1 text-xs font-semibold rounded-full bg-green-900/30 text-green-300 hover:bg-green-800/50 border border-green-800/50">${t('action.include_synthesis')}</button>
+                        <button data-model="${model}" data-action="discard" class="action-btn px-3 py-1 text-xs font-semibold rounded-full bg-red-900/30 text-red-300 hover:bg-red-800/50 border border-red-800/50">${t('action.mark_counterpoint')}</button>
                     </div>
                 </div>`,
             finalResultCard: (title, content) => `
@@ -522,28 +514,28 @@
                     <div class="prose max-w-none">${content}</div>
                     <div class="mt-8 border-t border-gray-800 pt-6">
                         <div class="text-center mb-6">
-                            <button id="reuse-prompt-btn" class="px-6 py-3 bg-violet-600 text-white font-semibold rounded-lg hover:bg-violet-700 transition-colors duration-300">Profundizar Análisis</button>
+                            <button id="reuse-prompt-btn" class="px-6 py-3 bg-violet-600 text-white font-semibold rounded-lg hover:bg-violet-700 transition-colors duration-300">${t('btn.deepen')}</button>
                         </div>
                         <div class="text-center flex flex-wrap justify-center gap-3">
-                            <button id="copy-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-semibold rounded-lg hover:bg-gray-700 transition-colors">Copiar</button>
-                            <button id="download-txt-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-semibold rounded-lg hover:bg-gray-700 transition-colors">Descargar .txt</button>
-                            <button id="download-pdf-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-semibold rounded-lg hover:bg-gray-700 transition-colors">Descargar .pdf</button>
+                            <button id="copy-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-semibold rounded-lg hover:bg-gray-700 transition-colors">${t('btn.copy')}</button>
+                            <button id="download-txt-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-semibold rounded-lg hover:bg-gray-700 transition-colors">${t('btn.download_txt')}</button>
+                            <button id="download-pdf-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-semibold rounded-lg hover:bg-gray-700 transition-colors">${t('btn.download_pdf')}</button>
                         </div>
                     </div>
                 </div>`,
             errorCard: (error, isTimeout = false) => {
-                const title = isTimeout ? "Análisis Excedió el Tiempo Límite" : "Error de Conexión";
-                const message = isTimeout 
-                    ? "Esto suele ocurrir con documentos muy grandes o en modo 'Análisis Dialéctico', ya que los servidores gratuitos tienen un límite de tiempo. Intenta con un fragmento de texto más corto o un modo de análisis más simple."
+                const title = isTimeout ? t('error.timeout_title') : t('error.connection_title');
+                const message = isTimeout
+                    ? t('error.timeout_body')
                     : `${error.message}<br><p class="text-sm mt-2">Causa probable: El servidor puede estar inactivo o sobrecargado. Espera un minuto e intenta nuevamente.</p>`;
                 return `<div class="text-red-300 col-span-1 md:col-span-3 text-center bg-red-900/20 p-6 rounded-lg border border-red-800/50"><h3 class="font-bold text-lg">${title}</h3><p>${message}</p></div>`
             }
         };
 
         const modeTexts = {
-            direct: "<strong>Análisis Conciso:</strong> Genera una respuesta directa y concisa, ideal para datos rápidos.",
-            perspectives: "<strong>Análisis Exhaustivo:</strong> Desarrolla múltiples perspectivas y explora matices, ideal para investigación profunda.",
-            debate: "<strong>Análisis Dialéctico:</strong> Somete las perspectivas a un examen cruzado para forjar una síntesis más robusta y validada."
+            get direct() { return t('mode.direct'); },
+            get perspectives() { return t('mode.perspectives'); },
+            get debate() { return t('mode.debate'); }
         };
 
         const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'for', 'with', 'on', 'at', 'from', 'by', 'in', 'of', 'to', 'is', 'are', 'was', 'were', 'it', 'this', 'that', 'they', 'he', 'she', 'we', 'i', 'you']);
@@ -570,7 +562,7 @@
                 const bestModel = Object.keys(scores).reduce((a, b) => scores[a] > scores[b] ? a : b);
                 return `<span class="px-1 py-0.5 rounded source-${bestModel}">${sentence}</span>`;
             });
-            let legend = `<div class="mt-8 border-t border-gray-800 pt-4 text-sm text-gray-500"><strong>Trazabilidad del Razonamiento:</strong><div class="flex flex-wrap gap-x-4 gap-y-2 mt-3"><span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#4285F4]"></span>Gemini</span><span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#34A853]"></span>DeepSeek</span><span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#D48105]"></span>Claude</span></div></div>`;
+            let legend = `<div class="mt-8 border-t border-gray-800 pt-4 text-sm text-gray-500"><strong>${t('label.reasoning_trace')}</strong><div class="flex flex-wrap gap-x-4 gap-y-2 mt-3"><span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#4285F4]"></span>Gemini</span><span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#34A853]"></span>DeepSeek</span><span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#D48105]"></span>Claude</span></div></div>`;
             return highlightedSentences.join(' ') + legend;
         }
 
@@ -582,7 +574,7 @@ async function handleFileSelect(event) {
 
     state.fileFormData = new FormData();
     const fileListDisplay = document.getElementById('file-list-display');
-    fileListDisplay.innerHTML = '<h4 class="font-semibold text-gray-300 mb-2">Archivos para análisis:</h4>';
+    fileListDisplay.innerHTML = `<h4 class="font-semibold text-gray-300 mb-2">${t('label.files_for_analysis')}</h4>`;
 
     let fileListHTML = '<ul class="list-disc list-inside">';
     for (const file of files) {
@@ -601,7 +593,8 @@ async function handleFileSelect(event) {
     if (debateRadio) debateRadio.click();
 }
         
-        function setLoading(loading, message = 'Analizando...') {
+        function setLoading(loading, message = null) {
+            if (!message) message = t('loading.analyzing');
             state.isLoading = loading;
             if(dom.generateBtn) dom.generateBtn.disabled = loading;
             if(dom.refineSummaryBtn) dom.refineSummaryBtn.disabled = loading;
@@ -610,7 +603,7 @@ async function handleFileSelect(event) {
             if (loading && dom.generateBtn) {
                 dom.generateBtn.innerHTML = `<span class="animate-pulse">${message}</span>`;
             } else if(dom.generateBtn) {
-                dom.generateBtn.innerHTML = 'Iniciar Análisis';
+                dom.generateBtn.innerHTML = t('step1.generate_btn');
             }
         }
 
@@ -660,13 +653,13 @@ async function handleFileSelect(event) {
         async function handleRefineDebate() {
             const userInstruction = document.getElementById('custom-refinement-prompt').value.trim();
             if (!userInstruction) {
-                alert('Por favor, proporciona una instrucción para guiar el debate.');
+                alert(t('alert.no_instruction'));
                 return;
             }
             state.history.push({ prompt: "Orientación del usuario para resolver desacuerdos: " + userInstruction, synthesis: "" });
             dom.frictionContainer.classList.add('hidden');
             document.getElementById('custom-refinement-prompt').value = '';
-            handleRefine('report', 'Síntesis Estratégica Refinada');
+            handleRefine('report', t('refine.report_refined_title'));
         }
 
          async function handleGenerateClick() {
@@ -678,13 +671,13 @@ async function handleFileSelect(event) {
         if (hasFiles) {
             promptText = dom.promptInput.value.trim();
             if (!promptText) {
-                alert('Por favor, introduce una pregunta o consulta para analizar los documentos.');
+                alert(t('alert.no_question'));
                 return;
             }
         } else {
             promptText = state.documentText || dom.promptInput.value.trim();
             if (!promptText) {
-                alert('Por favor, proporciona contenido para análisis, ya sea subiendo archivos o pegando texto.');
+                alert(t('alert.no_content'));
                 return;
             }
         }
@@ -692,7 +685,7 @@ async function handleFileSelect(event) {
         state.prompt = promptText;
         const selectedMode = document.querySelector('input[name="analysisMode"]:checked').value;
         
-        setLoading(true, "Iniciando análisis...");
+        setLoading(true, t('loading.starting'));
         dom.processTimelineContainer.classList.remove('hidden');
         updateTimeline(1);
 
@@ -705,11 +698,11 @@ async function handleFileSelect(event) {
         // LÓGICA DE DECISIÓN ACTUALIZADA
         if (hasFiles) {
             console.log("Archivos detectados. Iniciando análisis RAG.");
-            setLoading(true, 'Procesando documentos y preparando análisis RAG...');
+            setLoading(true, t('loading.docs'));
             handleRAGDebate(promptText); // Llamamos a la nueva función para RAG
         } else if (selectedMode === 'debate') {
             console.log("Modo debate sin archivos.");
-            setLoading(true, 'Iniciando debate dialéctico...');
+            setLoading(true, t('loading.debate'));
             if (window.dialecticEnhancements) {
                 window.dialecticEnhancements.handleDebateWithContext(null, !!state.documentText);
             } else {
@@ -717,7 +710,7 @@ async function handleFileSelect(event) {
             }
         } else {
             console.log("Análisis de texto simple.");
-            setLoading(true, 'Generando perspectivas...');
+            setLoading(true, t('loading.perspectives'));
             streamFetch(selectedMode, !!state.documentText);
         }
     }
@@ -820,19 +813,19 @@ if (hasPDF) {
         async function fetchWithRetries(url, options, retries = 3, delay = 10000, timeout = 600000) { // CAMBIADO A 6 MINUTOS
             for (let i = 0; i < retries; i++) {
                 try {
-                    if (i > 0) { setLoading(true, `Reintentando ${i}/${retries - 1}...`); }
+                    if (i > 0) { setLoading(true, `${t('loading.retry')} ${i}/${retries - 1}...`); }
                     const controller = new AbortController();
                     const id = setTimeout(() => controller.abort(), timeout);
                     const response = await fetch(url, { ...options, signal: controller.signal });
                     clearTimeout(id);
-                    if (!response.ok) { throw new Error(`Error del servidor: ${response.status}`); }
+                    if (!response.ok) { throw new Error(`${t('error.server_prefix')} ${response.status}`); }
                     return response;
                 } catch (error) {
                     if (i < retries - 1) { await new Promise(res => setTimeout(res, delay)); }
                     else { throw error; }
                 }
             }
-            throw new Error("No se pudo conectar al servidor.");
+            throw new Error(t('error.no_connection'));
         }
 
         async function streamFetch(mode = 'direct') {
@@ -920,7 +913,7 @@ if (hasPDF) {
             dom.responsesGrid.innerHTML = Object.keys(state.initial_responses).map(model => templates.responseCard(model, loadingSpinner)).join('');
             
             if (dom.step2Header) {
-                dom.step2Header.innerHTML = '<h2 class="text-2xl font-semibold mb-2 text-white">Análisis Dialéctico en Progreso...</h2><p class="text-gray-400">Las perspectivas están siendo examinadas cruzadamente. Este proceso puede tomar más tiempo.</p>';
+                dom.step2Header.innerHTML = `<h2 class="text-2xl font-semibold mb-2 text-white">${t('debate.in_progress_title')}</h2><p class="text-gray-400">${t('debate.in_progress_subtitle')}</p>`;
             }
             
             try {
@@ -944,7 +937,7 @@ if (hasPDF) {
                 state.history.push({ prompt: state.prompt, synthesis: result.synthesis });
                 dom.finalResultContainer.classList.remove('hidden');
                 const highlightedHTML = await highlightSynthesisSources(state.synthesis);
-                dom.finalResultContainer.innerHTML = templates.finalResultCard('Síntesis del Análisis Dialéctico', highlightedHTML);
+                dom.finalResultContainer.innerHTML = templates.finalResultCard(t('debate.synthesis_title'), highlightedHTML);
                 dom.finalResultContainer.scrollIntoView({behavior: 'smooth', block: 'start' });
                 attachFinalCardListeners();
                 updateTimeline(4);
@@ -1185,28 +1178,28 @@ if (selectedMode === 'debate') {
         function handleReusePromptClick() { 
             dom.promptInput.value = ""; 
             state.isRefining = true; 
-            if (dom.step1Title) dom.step1Title.innerText = 'Próximo Paso: Profundiza Tu Análisis'; 
-            if (dom.generateBtn) dom.generateBtn.innerText = 'Profundizar Análisis'; 
+            if (dom.step1Title) dom.step1Title.innerText = t('btn.deepen');
+            if (dom.generateBtn) dom.generateBtn.innerText = t('btn.deepen');
             dom.step1.scrollIntoView({behavior: 'smooth' }); 
             dom.promptInput.focus(); 
         }
         
-        function generatePlainTextContent(includeFullSession = true) { 
-            let content = 'Crisalia - Reporte de Análisis\n================================\n\n'; 
-            content += `CONSULTA INICIAL: ${state.prompt}\n\n`; 
-            if (includeFullSession && state.history.length > 0) { 
-                content += 'TRAZA DEL ANÁLISIS (Historial):\n---------------------------------------\n'; 
-                state.history.forEach((turn, index) => { 
-                    content += `\nIteración ${index + 1}:\n  Consulta: ${turn.prompt}\n  Respuesta: ${turn.synthesis}\n---\n`; 
-                }); 
-            } 
-            if (state.synthesis) { 
-                content += '\nRESULTADO FINAL:\n================\n'; 
-                const tempDiv = document.createElement('div'); 
-                tempDiv.innerHTML = state.synthesis; 
-                content += tempDiv.innerText; 
-            } 
-            return content; 
+        function generatePlainTextContent(includeFullSession = true) {
+            let content = `${t('export.title')}\n================================\n\n`;
+            content += `${t('export.initial_query')} ${state.prompt}\n\n`;
+            if (includeFullSession && state.history.length > 0) {
+                content += `${t('export.trace')}\n---------------------------------------\n`;
+                state.history.forEach((turn, index) => {
+                    content += `\n${t('export.iteration')} ${index + 1}:\n  ${t('export.query')} ${turn.prompt}\n  ${t('export.response')} ${turn.synthesis}\n---\n`;
+                });
+            }
+            if (state.synthesis) {
+                content += `\n${t('export.final_result')}\n================\n`;
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = state.synthesis;
+                content += tempDiv.innerText;
+            }
+            return content;
         }
         
         function generateSafeFilename() { 
@@ -1312,8 +1305,8 @@ NO DETECTAR:
         document.addEventListener('DOMContentLoaded', () => {
             initializeApp();
             if (dom.generateBtn) dom.generateBtn.addEventListener('click', handleGenerateClick);
-            if (dom.refineSummaryBtn) dom.refineSummaryBtn.addEventListener('click', () => handleRefine('summary', 'Resumen de Puntos Clave'));
-            if (dom.refineReportBtn) dom.refineReportBtn.addEventListener('click', () => handleRefine('report', 'Síntesis Estratégica'));
+            if (dom.refineSummaryBtn) dom.refineSummaryBtn.addEventListener('click', () => handleRefine('summary', t('refine.summary_title')));
+            if (dom.refineReportBtn) dom.refineReportBtn.addEventListener('click', () => handleRefine('report', t('refine.report_title')));
             if (dom.responsesGrid) dom.responsesGrid.addEventListener('click', handleDecision);
             if (dom.fileUploader) dom.fileUploader.addEventListener('change', handleFileSelect);
             if (dom.refineDebateBtn) dom.refineDebateBtn.addEventListener('click', handleRefineDebate);

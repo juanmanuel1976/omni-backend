@@ -169,7 +169,7 @@ def build_contextual_prompt(user_prompt, history, mode, isDocument=False):
         base_prompt = f"""**Instrucciones Clave:**
 1.  **Fuente de Verdad Absoluta:** El usuario ha proporcionado un documento. Su contenido es la única fuente de verdad.
 2.  **Tarea:** Basa tu respuesta exclusivamente en la información contenida en el documento. No añadas conocimiento externo ni verifiques los datos del documento.
-3.  **Idioma:** Responde siempre y únicamente en español.
+3.  **Idioma:** Responde siempre en el mismo idioma que usó el usuario en su consulta.
 **Consulta del Usuario sobre el Documento:**
 "{user_prompt}"
 """
@@ -178,7 +178,7 @@ def build_contextual_prompt(user_prompt, history, mode, isDocument=False):
     if mode == 'perspectives':
         base_prompt = f"""
 **Instrucciones Clave:**
-1.  **Idioma Obligatorio:** Responde siempre y únicamente en español.
+1.  **Idioma Obligatorio:** Responde siempre en el mismo idioma que usó el usuario en su consulta.
 2.  **Análisis Estructurado:** Tu tarea principal es ser útil. Si la consulta pide datos concretos, primero establece la base factual de manera clara y precisa. Solo después, si es apropiado, desarrolla un análisis estratégico sobre esa base verificable.
 **Consulta Actual del Usuario:**
 "{user_prompt}"
@@ -186,7 +186,7 @@ def build_contextual_prompt(user_prompt, history, mode, isDocument=False):
     else:
         base_prompt = f"""
 **Instrucciones Clave:**
-1.  **Idioma Obligatorio:** Responde siempre y únicamente en español.
+1.  **Idioma Obligatorio:** Responde siempre en el mismo idioma que usó el usuario en su consulta.
 2.  **Estilo Conciso:** Sé muy breve y directo.
 **Consulta Actual del Usuario:**
 "{user_prompt}"
@@ -591,7 +591,7 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     revised_results = await asyncio.gather(*critique_tasks)
     revised_responses = dict(zip(models_order, revised_results))
     synthesis_context = "\n\n".join([f"**Argumento Revisado de {m.title()}:**\n{r}" for m, r in revised_responses.items()])
-    synthesis_prompt = f"**Consulta Original (con historial y directivas de refinamiento):**\n{contextual_prompt}\n\n**Debate de Expertos (Argumentos Revisados):**\n{synthesis_context}\n\n**Tu Tarea Final como Moderador:** Eres un experto en síntesis estratégica. Tu objetivo es crear un informe final unificado y coherente. Integra los argumentos revisados de los expertos en una única respuesta. Asegúrate de seguir TODAS las instrucciones y directivas de refinamiento dadas en la consulta original. La síntesis debe ser clara, accionable y responder directamente a la petición del usuario."
+    synthesis_prompt = f"**Consulta Original (con historial y directivas de refinamiento):**\n{contextual_prompt}\n\n**Debate de Expertos (Argumentos Revisados):**\n{synthesis_context}\n\n**Tu Tarea Final como Moderador:** Eres un experto en síntesis estratégica. Tu objetivo es crear un informe final unificado y coherente. Integra los argumentos revisados de los expertos en una única respuesta. Asegúrate de seguir TODAS las instrucciones y directivas de refinamiento dadas en la consulta original. La síntesis debe ser clara, accionable y responder directamente a la petición del usuario. **IMPORTANTE: Responde siempre en el mismo idioma que usó el usuario en su consulta original.**"
 
     if request.dissidenceContext and request.dissidenceContext.get('forcedSynthesis'):
         synthesis_prompt += "\n\n**INSTRUCCIÓN ESPECIAL DE SÍNTESIS FORZADA:** El usuario ha solicitado finalizar el debate. Enfócate en los consensos existentes y presenta las diferencias restantes como perspectivas complementarias o áreas para futura exploración, no como conflictos a resolver. El objetivo es entregar un resultado accionable con la información disponible."

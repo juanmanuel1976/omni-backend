@@ -170,14 +170,14 @@ function updateSemanticConsensusDisplay(score, analysis) {
         
         consensusStatus.innerHTML = `
             <div class="text-sm text-gray-300 mt-2">
-                <div class="mb-1"><strong>Análisis semántico:</strong> ${strongCount} consensos fuertes, ${moderateCount} moderados</div>
+                <div class="mb-1"><strong>${t('consensus.semantic_label')}</strong> ${strongCount} ${t('consensus.strong_label').replace(':','')} , ${moderateCount} ${t('consensus.moderate_label').replace(':','')}</div>
                 ${analysis.explanation ? `<div class="text-xs text-gray-400 mb-2">${analysis.explanation}</div>` : ''}
                 <details class="cursor-pointer">
-                    <summary class="text-violet-400 hover:text-violet-300">Ver desglose detallado</summary>
+                    <summary class="text-violet-400 hover:text-violet-300">${t('consensus.breakdown_btn')}</summary>
                     <div class="mt-2 text-xs space-y-1 bg-gray-900/50 p-2 rounded">
-                        ${strongCount > 0 ? `<div><strong class="text-green-400">Consenso fuerte:</strong> ${analysis.strong_consensus.join(', ')}</div>` : ''}
-                        ${moderateCount > 0 ? `<div><strong class="text-yellow-400">Consenso moderado:</strong> ${analysis.moderate_consensus.join(', ')}</div>` : ''}
-                        ${analysis.divergence_areas && analysis.divergence_areas.length > 0 ? `<div><strong class="text-red-400">Divergencias:</strong> ${analysis.divergence_areas.join(', ')}</div>` : ''}
+                        ${strongCount > 0 ? `<div><strong class="text-green-400">${t('consensus.strong_label')}</strong> ${analysis.strong_consensus.join(', ')}</div>` : ''}
+                        ${moderateCount > 0 ? `<div><strong class="text-yellow-400">${t('consensus.moderate_label')}</strong> ${analysis.moderate_consensus.join(', ')}</div>` : ''}
+                        ${analysis.divergence_areas && analysis.divergence_areas.length > 0 ? `<div><strong class="text-red-400">${t('consensus.divergence_label')}</strong> ${analysis.divergence_areas.join(', ')}</div>` : ''}
                     </div>
                 </details>
             </div>
@@ -221,7 +221,7 @@ function calculateTraditionalConsensus() {
         setTimeout(() => { consensusBar.style.width = `${score}%`; }, 100);
     }
     if (consensusStatus) {
-        consensusStatus.innerHTML = `<div class="text-sm text-gray-400 mt-2">Análisis básico por palabras clave (${intersection.size} coincidencias de ${union.size} conceptos)</div>`;
+        consensusStatus.innerHTML = `<div class="text-sm text-gray-400 mt-2">${t('consensus.basic_label')} (${intersection.size} ${t('consensus.matches')} ${union.size} ${t('consensus.concepts')})</div>`;
     }
     
     return score;
@@ -289,7 +289,7 @@ function generateContextualPrompts(originalPrompt, responses, dissidences) {
     if (dissidences.length > 0) {
         const mainCategories = dissidences.map(d => d.category).slice(0, 2);
         prompts.push({
-            title: "Resolver Diferencias Conceptuales",
+            title: t('prompt.resolve_diff'),
             prompt: `Enfócate en reconciliar las diferencias sobre ${mainCategories.join(' y ')} mencionadas en las respuestas anteriores. Proporciona una perspectiva unificada que integre los mejores aspectos de cada enfoque.`,
             type: "integration"
         });
@@ -305,7 +305,7 @@ function generateContextualPrompts(originalPrompt, responses, dissidences) {
         
         if (longestResponse[1].content.length > shortestResponse[1].content.length * 1.5) {
             prompts.push({
-                title: "Equilibrar Profundidad",
+                title: t('prompt.balance_depth'),
                 prompt: `Toma el nivel de detalle de ${longestResponse[0]} pero mantén la concisión de ${shortestResponse[0]}. Proporciona un análisis equilibrado que sea tanto completo como accesible.`,
                 type: "balance"
             });
@@ -314,7 +314,7 @@ function generateContextualPrompts(originalPrompt, responses, dissidences) {
     
     // Prompt de consenso forzado
     prompts.push({
-        title: "Maximizar Consenso",
+        title: t('prompt.maximize_consensus'),
         prompt: `Revisa las respuestas anteriores e identifica los puntos donde TODOS los modelos coinciden. Construye una nueva respuesta basada exclusivamente en estos consensos, agregando solo información que complemente sin contradecir.`,
         type: "consensus"
     });
@@ -369,34 +369,34 @@ function displayRealDissidences(dissidences, consensusScore = 0) {
                     </svg>
                     <span class="text-blue-300 font-medium">Consenso: ${consensusScore}% - Opciones disponibles</span>
                 </div>
-                <p class="text-sm text-blue-200 mb-3">Puedes dirigir el análisis hacia aspectos específicos:</p>
-                
+                <p class="text-sm text-blue-200 mb-3">${t('exploration.options_subtitle')}</p>
+
                 <div class="space-y-2">
-                    <button class="exploration-btn w-full text-left px-3 py-2 text-sm bg-blue-800/30 hover:bg-blue-700/50 rounded border border-blue-600/50 transition-colors" 
+                    <button class="exploration-btn w-full text-left px-3 py-2 text-sm bg-blue-800/30 hover:bg-blue-700/50 rounded border border-blue-600/50 transition-colors"
                             data-exploration="alternative">
-                        Explorar perspectivas contrarias
+                        ${t('exploration.btn.alternative')}
                     </button>
-                    <button class="exploration-btn w-full text-left px-3 py-2 text-sm bg-purple-800/30 hover:bg-purple-700/50 rounded border border-purple-600/50 transition-colors" 
+                    <button class="exploration-btn w-full text-left px-3 py-2 text-sm bg-purple-800/30 hover:bg-purple-700/50 rounded border border-purple-600/50 transition-colors"
                             data-exploration="deeper">
-                        Profundizar en aspectos específicos
+                        ${t('exploration.btn.deeper')}
                     </button>
-                    <button class="exploration-btn w-full text-left px-3 py-2 text-sm bg-amber-800/30 hover:bg-amber-700/50 rounded border border-amber-600/50 transition-colors" 
+                    <button class="exploration-btn w-full text-left px-3 py-2 text-sm bg-amber-800/30 hover:bg-amber-700/50 rounded border border-amber-600/50 transition-colors"
                             data-exploration="skeptical">
-                        Análisis escéptico
+                        ${t('exploration.btn.skeptical')}
                     </button>
-                    <button class="exploration-btn w-full text-left px-3 py-2 text-sm bg-green-800/30 hover:bg-green-700/50 rounded border border-green-600/50 transition-colors" 
+                    <button class="exploration-btn w-full text-left px-3 py-2 text-sm bg-green-800/30 hover:bg-green-700/50 rounded border border-green-600/50 transition-colors"
                             data-exploration="custom">
-                        Prompt personalizado
+                        ${t('exploration.btn.custom')}
                     </button>
                 </div>
-                
+
                 <!-- Campo para prompt personalizado (inicialmente oculto) -->
                 <div id="custom-exploration-area" class="hidden mt-4">
-                    <label class="text-sm font-medium text-gray-300 mb-2 block">Dirige el análisis:</label>
-                    <textarea id="custom-exploration-prompt" placeholder="Ej: 'Enfócate en los riesgos financieros' o 'Analiza desde perspectiva usuario final'" 
+                    <label class="text-sm font-medium text-gray-300 mb-2 block">${t('exploration.custom_label')}</label>
+                    <textarea id="custom-exploration-prompt" placeholder="${t('exploration.custom_placeholder')}"
                               class="w-full h-20 p-3 bg-gray-900 border border-gray-700 text-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 text-sm"></textarea>
                     <button id="execute-custom-exploration" class="mt-2 px-4 py-2 bg-violet-600 text-white rounded hover:bg-violet-700 transition-colors text-sm">
-                        Ejecutar Análisis Dirigido
+                        ${t('exploration.execute_btn')}
                     </button>
                 </div>
             </div>
@@ -710,11 +710,11 @@ async function handleDebateWithContext(dissidenceContext = null) {
     if (dom.step2Header) {
        // Detectar si es primera vez o refinamiento
 const isRefinement = dissidenceContext && dissidenceContext.userRefinementPrompt;
-const headerText = isRefinement ? 
-    'Las perspectivas están siendo examinadas cruzadamente con tu contexto de refinamiento.' :
-    'Las perspectivas están siendo examinadas cruzadamente para generar una síntesis robusta.';
-    
-dom.step2Header.innerHTML = `<h2 class="text-2xl font-semibold mb-2 text-white">Análisis Dialéctico en Progreso...</h2><p class="text-gray-400">${headerText}</p>`;
+const headerText = isRefinement ?
+    t('debate.in_progress_subtitle_refine') :
+    t('debate.in_progress_subtitle');
+
+dom.step2Header.innerHTML = `<h2 class="text-2xl font-semibold mb-2 text-white">${t('debate.in_progress_title')}</h2><p class="text-gray-400">${headerText}</p>`;
     }
     
     if (window.setLoading) window.setLoading(true, "Generando respuestas iniciales de cada modelo...");
@@ -733,7 +733,7 @@ dom.step2Header.innerHTML = `<h2 class="text-2xl font-semibold mb-2 text-white">
     initial_responses: window.state.initial_responses
         ? Object.fromEntries(
             Object.entries(window.state.initial_responses).map(
-                ([k, v]) => [k, typeof v === 'object' ? v : { content: v }]
+                ([k, v]) => [k, typeof v === 'object' && v !== null ? (v.content || '') : String(v)]
             )
           )
         : null
@@ -744,9 +744,9 @@ if (dissidenceContext) {
 }
 
 const isFirstIteration = !dissidenceContext || !dissidenceContext.userRefinementPrompt;
-const progressMessage = isFirstIteration ? 
-    "Ejecutando análisis multi-agente avanzado con validación cruzada... (3-4 minutos)" :
-    "Refinando perspectivas con tu orientación específica... (1-2 minutos)";
+const progressMessage = isFirstIteration ?
+    t('loading.debate_first') :
+    t('loading.debate_refine');
 
 console.log('Iniciando análisis dialéctico completo...');
 if (window.setLoading) window.setLoading(true, progressMessage);
@@ -771,7 +771,7 @@ const response = await window.fetchWithRetries(`${window.API_BASE_URL}/api/debat
             }
         });
         if (dom.step2Header) {
-            dom.step2Header.innerHTML = '<h2 class="text-2xl font-semibold mb-2 text-white">Perspectivas Individuales Completadas</h2><p class="text-gray-400">Revisa los argumentos refinados de cada modelo antes del resultado final.</p>';
+            dom.step2Header.innerHTML = `<h2 class="text-2xl font-semibold mb-2 text-white">${t('debate.perspectives_completed')}</h2><p class="text-gray-400">${t('debate.perspectives_review')}</p>`;
         }
         window.state.synthesis = result.synthesis;
         window.state.history.push({ prompt: window.state.prompt, synthesis: result.synthesis });
@@ -779,7 +779,7 @@ const response = await window.fetchWithRetries(`${window.API_BASE_URL}/api/debat
         if (dom.finalResultContainer && window.templates && window.highlightSynthesisSources) {
             dom.finalResultContainer.classList.remove('hidden');
             const highlightedHTML = await window.highlightSynthesisSources(window.state.synthesis);
-            dom.finalResultContainer.innerHTML = window.templates.finalResultCard('Síntesis del Análisis Dialéctico Refinado', highlightedHTML);
+            dom.finalResultContainer.innerHTML = window.templates.finalResultCard(t('debate.synthesis_title_refined'), highlightedHTML);
             dom.finalResultContainer.scrollIntoView({behavior: 'smooth', block: 'start' });
         }
         
@@ -827,7 +827,7 @@ function handleExplorationClick(event) {
 function handleCustomExplorationClick() {
     const customPrompt = document.getElementById('custom-exploration-prompt').value.trim();
     if (!customPrompt) {
-        alert('Por favor, escribe una dirección para el análisis');
+        alert(t('alert.write_direction'));
         return;
     }
     
