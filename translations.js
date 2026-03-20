@@ -183,6 +183,10 @@ const TRANSLATIONS = {
     'debate.perspectives_review': 'Revisa los argumentos refinados de cada modelo antes del resultado final.',
     'debate.synthesis_title': 'Síntesis del Análisis Dialéctico',
     'debate.synthesis_title_refined': 'Síntesis del Análisis Dialéctico Refinado',
+    'creative.toggle': 'Modo Creativo',
+    'creative.desc': 'Perspectivas en tensión real',
+    'creative.badge': '✦ Modo Creativo',
+    'creative.tooltip': 'Los modelos exploran múltiples perspectivas en tensión antes de responder, en lugar de responder desde un único ángulo. Aumenta la diversidad genuina del debate.',
     'refine.summary_title': 'Resumen de Puntos Clave',
     'refine.report_title': 'Síntesis Estratégica',
     'refine.report_refined_title': 'Síntesis Estratégica Refinada',
@@ -409,6 +413,10 @@ const TRANSLATIONS = {
     'debate.perspectives_review': 'Review the refined arguments from each model before the final result.',
     'debate.synthesis_title': 'Dialectical Analysis Synthesis',
     'debate.synthesis_title_refined': 'Refined Dialectical Analysis Synthesis',
+    'creative.toggle': 'Creative Mode',
+    'creative.desc': 'Perspectives in real tension',
+    'creative.badge': '✦ Creative Mode',
+    'creative.tooltip': 'Models explore multiple perspectives in genuine tension before responding, instead of answering from a single angle. Increases real diversity in the debate.',
     'refine.summary_title': 'Key Points Summary',
     'refine.report_title': 'Strategic Synthesis',
     'refine.report_refined_title': 'Refined Strategic Synthesis',
@@ -469,6 +477,11 @@ function applyTranslations() {
         el.innerHTML = translation;
       }
     }
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const key = el.getAttribute('data-i18n-title');
+    const translation = t(key);
+    if (translation) el.title = translation;
   });
   // Update html lang attribute
   document.documentElement.lang = lang;

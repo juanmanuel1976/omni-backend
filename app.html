@@ -240,7 +240,7 @@
             </div>
 
             <div class="mt-5 flex items-center gap-3">
-                <button id="creative-mode-toggle" onclick="toggleCreativeMode()" title="Los modelos exploran múltiples perspectivas en tensión real antes de responder, en lugar de responder desde un único ángulo. Aumenta la diversidad del debate." class="flex items-center gap-2 px-4 py-2 bg-gray-900 border border-gray-600 text-gray-400 rounded-lg text-sm hover:border-violet-500 hover:text-violet-300 transition-colors">
+                <button id="creative-mode-toggle" onclick="toggleCreativeMode()" data-i18n-title="creative.tooltip" class="flex items-center gap-2 px-4 py-2 bg-gray-900 border border-gray-600 text-gray-400 rounded-lg text-sm hover:border-violet-500 hover:text-violet-300 transition-colors">
                     <span>✦</span>
                     <span data-i18n="creative.toggle">Modo Creativo</span>
                     <span id="creative-mode-status" class="text-xs px-1.5 py-0.5 bg-gray-700 rounded text-gray-400">OFF</span>
@@ -1012,7 +1012,7 @@ if (hasPDF) {
                 dom.finalResultContainer.classList.remove('hidden');
                 const highlightedHTML = await highlightSynthesisSources(state.synthesis);
                 const debateTitle = result.creative_mode
-                    ? `${t('debate.synthesis_title')} <span class="text-xs px-2 py-0.5 bg-violet-900/60 text-violet-300 rounded-full ml-2 font-normal">✦ Modo Creativo</span>`
+                    ? `${t('debate.synthesis_title')} <span class="text-xs px-2 py-0.5 bg-violet-900/60 text-violet-300 rounded-full ml-2 font-normal">${t('creative.badge')}</span>`
                     : t('debate.synthesis_title');
                 dom.finalResultContainer.innerHTML = templates.finalResultCard(debateTitle, highlightedHTML);
                 dom.finalResultContainer.scrollIntoView({behavior: 'smooth', block: 'start' });
