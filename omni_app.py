@@ -98,6 +98,7 @@ class DebateRequest(BaseModel):
     isDocument: bool = False
     creative_mode: bool = False
     lang: str = 'en'
+    prior_llm_response: Optional[str] = None
 
 class FeedbackRequest(BaseModel):
     rating: int          # 1-5
@@ -668,10 +669,20 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
 
     # Instrucción de ambigüedad (siempre activa)
     ambiguity_suffix = f"\n\n{lbl['ambiguity_instruction']}"
-    # Instrucción de FODA (solo cuando el usuario lo desactiva)
-    initial_prompt = contextual_prompt + ambiguity_suffix + (
-        _CREATIVE_INITIAL.get(request.lang, _CREATIVE_INITIAL['en']) if request.creative_mode else ""
-    )
+
+    # Modo Mejora: si el usuario pegó una respuesta previa de otro LLM, incluirla como contexto
+    if request.prior_llm_response and request.prior_llm_response.strip():
+        improve_label = "Respuesta previa de otra IA (a mejorar)" if request.lang == 'es' else "Prior AI Response (to be improved)"
+        improve_instruction = (
+            "Tu tarea es mejorar esa respuesta: identifica sus puntos ciegos, sesgos o afirmaciones sin sustento, y entrega una versión más robusta." if request.lang == 'es'
+            else "Your task is to improve that response: identify its blind spots, biases or unsupported claims, and deliver a more robust version."
+        )
+        prior_block = f"\n\n---\n**{improve_label}:**\n{request.prior_llm_response.strip()}\n\n{improve_instruction}\n---"
+        initial_prompt = contextual_prompt + prior_block + ambiguity_suffix
+    else:
+        initial_prompt = contextual_prompt + ambiguity_suffix
+
+    initial_prompt += _CREATIVE_INITIAL.get(request.lang, _CREATIVE_INITIAL['en']) if request.creative_mode else ""
 
     raw = {k: (v.get('content', '') if isinstance(v, dict) else v) for k, v in (request.initial_responses or {}).items()}
     if raw and any(v.strip() for v in raw.values()):

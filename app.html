@@ -190,7 +190,21 @@
                 </div>
             </div>
             <textarea id="prompt-input" data-i18n="step1.textarea_placeholder" placeholder="Paste text directly here..." class="w-full h-40 p-4 bg-gray-900 border border-gray-700 text-gray-300 rounded-lg resize-y focus:ring-2 focus:ring-violet-500 focus:border-transparent"></textarea>
-            
+
+            <!-- IMPROVE MODE: pegar respuesta de otro LLM -->
+            <div class="mt-4">
+                <button type="button" onclick="toggleImproveMode()" class="flex items-center gap-2 text-sm text-gray-500 hover:text-violet-400 transition-colors">
+                    <span id="improve-mode-arrow">▶</span>
+                    <span data-i18n="improve.toggle">Already have an AI response? Improve it with Crisalia</span>
+                </button>
+                <div id="improve-mode-panel" class="hidden mt-3">
+                    <div class="p-3 bg-violet-900/20 border border-violet-800/40 rounded-lg mb-2">
+                        <p class="text-xs text-violet-300" data-i18n="improve.hint">Paste the response you received from ChatGPT, Gemini, or any other AI. Crisalia will subject it to multi-model debate and return a substantially improved version.</p>
+                    </div>
+                    <textarea id="prior-llm-response" data-i18n="improve.placeholder" placeholder="Paste the existing AI response here..." class="w-full h-36 p-4 bg-gray-900 border border-violet-700/50 text-gray-300 rounded-lg resize-y focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm"></textarea>
+                </div>
+            </div>
+
             <div class="mt-6">
                 <label class="text-sm font-medium text-gray-400 mb-3 block" data-i18n="step1.method_label">Analysis Methodology:</label>
                 <div class="mode-selector flex flex-col sm:flex-row bg-gray-900 rounded-lg p-1 border border-gray-700">
@@ -478,6 +492,13 @@
         window.API_BASE_URL = 'https://omni-backend-dev.onrender.com';
         window.PLAN = localStorage.getItem('crisalia_plan') || 'free'; // 'free' | 'pro'
         window.CREATIVE_MODE = false;
+        window.toggleImproveMode = function() {
+            const panel = document.getElementById('improve-mode-panel');
+            const arrow = document.getElementById('improve-mode-arrow');
+            const hidden = panel.classList.contains('hidden');
+            panel.classList.toggle('hidden', !hidden);
+            arrow.textContent = hidden ? '▼' : '▶';
+        };
         window.toggleCreativeMode = function() {
             window.CREATIVE_MODE = !window.CREATIVE_MODE;
             const btn = document.getElementById('creative-mode-toggle');
@@ -993,7 +1014,7 @@ if (hasPDF) {
             try {
                 const response = await fetchWithRetries(`${API_BASE_URL}/api/debate`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt: state.prompt, history: state.history, creative_mode: window.CREATIVE_MODE, lang: localStorage.getItem('crisalia_lang') || 'en' }),
+                    body: JSON.stringify({ prompt: state.prompt, history: state.history, creative_mode: window.CREATIVE_MODE, lang: localStorage.getItem('crisalia_lang') || 'en', prior_llm_response: (document.getElementById('prior-llm-response')?.value || '').trim() || null }),
                 });
                 updateTimeline(3);
                 clearTimeout(analysisTimeout);
