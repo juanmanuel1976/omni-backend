@@ -604,7 +604,7 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
         context = "\n\n".join([f"**Respuesta de {m.title()}:**\n{r}" for m, r in initial_responses.items() if m != model])
         own_response = initial_responses[model]
         if not own_response or own_response.startswith("Error"):
-            own_response = "[Sin respuesta inicial disponible — construí tu análisis directamente desde la consulta original]"
+            own_response = "[No initial response available / Sin respuesta inicial disponible — build your analysis directly from the original query / construí tu análisis directamente desde la consulta original]"
         if not is_refinement_iteration:
             base_critique = f"""**Consulta Original del Usuario:**\n{contextual_prompt}\n\n**Tu Respuesta Inicial:**\n{own_response}\n\n**Respuestas de Colegas:**\n{context}\n\n**Tu Tarea (Ronda 1 - Crítica Abierta):** Analiza críticamente las respuestas de tus colegas EN RELACIÓN A LA CONSULTA ORIGINAL. Identifica fortalezas, debilidades y puntos ciegos. Refina y mejora tu propio argumento incorporando las perspectivas valiosas para enriquecer el análisis global."""
             if request.creative_mode:
