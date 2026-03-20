@@ -531,7 +531,7 @@ async def generate_initial_response(raw_request: Request, request: GenerateIniti
     background_tasks.add_task(log_user_query_supabase, "/api/generate-initial", request.prompt, {"model": request.model, "ip_usuario": client_ip})
 
     contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'direct')
-    response = await call_ai_model_no_stream(request.model, contextual_prompt)
+    response = await call_ai_model_no_stream(request.model, contextual_prompt, endpoint="/api/generate-initial")
     return {"response": response}
 
 @app.post('/api/refine')
@@ -555,7 +555,7 @@ async def refine_and_synthesize(raw_request: Request, request: RefineRequest, ba
     for model, content in active_responses.items():
         synthesis_prompt_parts.append(f"**Respuesta de {model.title()}:**\n{content}\n")
     final_prompt = "\n".join(synthesis_prompt_parts)
-    synthesis_text = await call_ai_model_no_stream('gemini', final_prompt)
+    synthesis_text = await call_ai_model_no_stream('gemini', final_prompt, endpoint="/api/refine")
     return {"synthesis": synthesis_text}
 
 @app.post('/api/debate')
@@ -573,7 +573,7 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     if request.initial_responses:
         initial_responses = {k: v.get('content', '') if isinstance(v, dict) else v for k, v in request.initial_responses.items()}
     else:
-        initial_tasks = [call_ai_model_no_stream(m, contextual_prompt) for m in ['gemini', 'deepseek', 'claude']]
+        initial_tasks = [call_ai_model_no_stream(m, contextual_prompt, endpoint="/api/debate") for m in ['gemini', 'deepseek', 'claude']]
         results = await asyncio.gather(*initial_tasks)
         initial_responses = {'gemini': results[0], 'deepseek': results[1], 'claude': results[2]}
 
@@ -589,7 +589,7 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
             base_critique = f"""**Tu Respuesta Anterior:**\n{initial_responses[model]}\n\n**Respuestas de Colegas (Ronda Anterior):**\n{context}\n\n**Tu Tarea (Ronda de Refinamiento):** El usuario ha dado nuevas instrucciones (detalladas en la consulta principal). Tu objetivo es integrar estas directivas. Reformula tu análisis para alinearte con la guía del usuario, manteniendo los consensos ya logrados y abordando las diferencias críticas señaladas."""
         critique_prompts[model] = base_critique
     
-    critique_tasks = [call_ai_model_no_stream(m, critique_prompts[m]) for m in models_order]
+    critique_tasks = [call_ai_model_no_stream(m, critique_prompts[m], endpoint="/api/debate") for m in models_order]
     revised_results = await asyncio.gather(*critique_tasks)
     revised_responses = dict(zip(models_order, revised_results))
     synthesis_context = "\n\n".join([f"**Argumento Revisado de {m.title()}:**\n{r}" for m, r in revised_responses.items()])
@@ -598,7 +598,7 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     if request.dissidenceContext and request.dissidenceContext.get('forcedSynthesis'):
         synthesis_prompt += "\n\n**INSTRUCCIÓN ESPECIAL DE SÍNTESIS FORZADA:** El usuario ha solicitado finalizar el debate. Enfócate en los consensos existentes y presenta las diferencias restantes como perspectivas complementarias o áreas para futura exploración, no como conflictos a resolver. El objetivo es entregar un resultado accionable con la información disponible."
 
-    final_synthesis = await call_ai_model_no_stream('gemini', synthesis_prompt)
+    final_synthesis = await call_ai_model_no_stream('gemini', synthesis_prompt, endpoint="/api/debate")
     return { "revised": revised_responses, "synthesis": final_synthesis, "initial": initial_responses, "dissidenceContext": request.dissidenceContext }
 
 @app.post('/api/semantic-consensus')
