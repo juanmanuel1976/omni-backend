@@ -755,7 +755,6 @@ if (window.CREATIVE_MODE) {
     requestBody.creative_mode = true;
 }
 
-requestBody.foda_mode = window.FODA_MODE !== false;
 requestBody.lang = localStorage.getItem('crisalia_lang') || 'en';
 
 const isFirstIteration = !dissidenceContext || !dissidenceContext.userRefinementPrompt;

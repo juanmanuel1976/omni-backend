@@ -48,8 +48,11 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 _rate_limit_store: Dict[str, list] = defaultdict(list)
 _RATE_LIMIT = 60
 _RATE_WINDOW = 60  # segundos
+OWNER_KEY = os.environ.get("CRISALIA_OWNER_KEY")  # si coincide, bypass total
 
-def _check_rate_limit(ip: str) -> bool:
+def _check_rate_limit(ip: str, owner_key: str = "") -> bool:
+    if OWNER_KEY and owner_key == OWNER_KEY:
+        return True  # propietario — sin límite
     now = time.time()
     calls = _rate_limit_store[ip]
     _rate_limit_store[ip] = [t for t in calls if now - t < _RATE_WINDOW]
@@ -94,7 +97,6 @@ class DebateRequest(BaseModel):
     dissidenceContext: Optional[Dict] = None
     isDocument: bool = False
     creative_mode: bool = False
-    foda_mode: bool = True
     lang: str = 'en'
 
 class FeedbackRequest(BaseModel):
@@ -234,7 +236,6 @@ _LABELS = {
         'task_refine_body': 'El usuario ha dado nuevas instrucciones (detalladas en la consulta principal). Tu objetivo es integrar estas directivas. Reformula tu análisis para alinearte con la guía del usuario, manteniendo los consensos ya logrados y abordando las diferencias críticas señaladas.',
         'lang_instruction': 'IMPORTANTE: Responde SIEMPRE en español, que es el idioma en que el usuario escribió su consulta.',
         'ambiguity_instruction': 'IMPORTANTE: Si la consulta es ambigua o le falta contexto, NO pidas aclaraciones. En cambio, enuncia brevemente tus supuestos de interpretación al inicio de tu respuesta y procede con tu mejor análisis.',
-        'foda_suppress': 'IMPORTANTE: NO uses el esquema FODA/SWOT ni listes Fortalezas/Debilidades/Oportunidades/Amenazas. Entrega un análisis directo y argumentado.',
     },
     'en': {
         'original_query':   'Original User Query',
@@ -248,7 +249,6 @@ _LABELS = {
         'task_refine_body': 'The user has given new instructions (detailed in the main query). Your goal is to integrate these directives. Reformulate your analysis to align with the user\'s guidance, maintaining established consensus and addressing the critical differences indicated.',
         'lang_instruction': 'IMPORTANT: Always respond in English, which is the language the user used in their query.',
         'ambiguity_instruction': 'IMPORTANT: If the query is ambiguous or lacks sufficient context, do NOT ask for clarification. Instead, briefly state your interpretation assumptions at the beginning of your response and proceed with your best analysis.',
-        'foda_suppress': 'IMPORTANT: Do NOT use a SWOT/FODA framework or list Strengths/Weaknesses/Opportunities/Threats. Deliver a direct, well-argued analysis instead.',
     },
 }
 
@@ -660,7 +660,8 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     if request.dissidenceContext:
         contextual_prompt = build_enhanced_dialectic_prompt(contextual_prompt, request.dissidenceContext)
 
-    if not _check_rate_limit(client_ip):
+    owner_key = raw_request.headers.get("X-Owner-Key", "")
+    if not _check_rate_limit(client_ip, owner_key):
         raise HTTPException(status_code=429, detail="Too many requests. Please wait a moment.")
 
     lbl = _LABELS.get(request.lang, _LABELS['en'])
@@ -668,9 +669,7 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     # Instrucción de ambigüedad (siempre activa)
     ambiguity_suffix = f"\n\n{lbl['ambiguity_instruction']}"
     # Instrucción de FODA (solo cuando el usuario lo desactiva)
-    foda_suffix = f"\n\n{lbl['foda_suppress']}" if not request.foda_mode else ""
-
-    initial_prompt = contextual_prompt + ambiguity_suffix + foda_suffix + (
+    initial_prompt = contextual_prompt + ambiguity_suffix + (
         _CREATIVE_INITIAL.get(request.lang, _CREATIVE_INITIAL['en']) if request.creative_mode else ""
     )
 
