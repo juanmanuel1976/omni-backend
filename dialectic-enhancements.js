@@ -751,6 +751,10 @@ if (dissidenceContext) {
     requestBody.dissidenceContext = dissidenceContext;
 }
 
+if (window.CREATIVE_MODE) {
+    requestBody.creative_mode = true;
+}
+
 const isFirstIteration = !dissidenceContext || !dissidenceContext.userRefinementPrompt;
 const progressMessage = isFirstIteration ?
     t('loading.debate_first') :
