@@ -119,7 +119,9 @@ async def log_user_query_supabase(endpoint: str, prompt: str, extra_info: dict =
             "extra_info": extra_info or {}
         }
         async with httpx.AsyncClient(timeout=10.0) as client:
-            await client.post(f"{SUPABASE_URL}/rest/v1/consultas_log", headers=headers, json=payload)
+            r = await client.post(f"{SUPABASE_URL}/rest/v1/consultas_log", headers=headers, json=payload)
+            if r.status_code not in (200, 201):
+                logger.error(f"Supabase rechazó consultas_log ({r.status_code}): {r.text}")
     except Exception as e:
         logger.error(f"Fallo al guardar el log en Supabase: {e}")
 
@@ -252,11 +254,11 @@ async def stream_gemini(prompt, endpoint="unknown"):
                 tokens_out = usage.get("candidatesTokenCount", 0)
             except Exception:
                 pass
-    except Exception as e:
-        yield {"model": "gemini", "chunk": f"Error: {e}"}
-    finally:
+        # Log fuera del finally — await en finally de async generator puede no ejecutarse
         if tokens_in or tokens_out:
             await costs_tracker.log_cost("gemini", endpoint, tokens_in, tokens_out)
+    except Exception as e:
+        yield {"model": "gemini", "chunk": f"Error: {e}"}
 
 async def stream_deepseek(prompt, endpoint="unknown"):
     if not DEEPSEEK_API_KEY:
@@ -288,11 +290,11 @@ async def stream_deepseek(prompt, endpoint="unknown"):
                                 tokens_out = usage.get("completion_tokens", tokens_out)
                         except json.JSONDecodeError:
                             continue
-    except Exception as e:
-        yield {"model": "deepseek", "chunk": f"Error: {e}"}
-    finally:
+        # Log fuera del finally — await en finally de async generator puede no ejecutarse
         if tokens_in or tokens_out:
             await costs_tracker.log_cost("deepseek", endpoint, tokens_in, tokens_out)
+    except Exception as e:
+        yield {"model": "deepseek", "chunk": f"Error: {e}"}
 
 async def stream_claude(prompt, endpoint="unknown"):
     if not ANTHROPIC_API_KEY:

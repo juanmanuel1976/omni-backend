@@ -60,13 +60,15 @@ async def log_cost(model: str, endpoint: str, tokens_input: int, tokens_output: 
             "cost_usd":      round(cost, 8),
         }
         async with httpx.AsyncClient(timeout=5.0) as client:
-            await client.post(
+            r = await client.post(
                 f"{SUPABASE_URL}/rest/v1/{TABLE}",
                 headers=_write_headers(),
                 json=payload,
             )
+            if r.status_code not in (200, 201):
+                logger.error(f"[costs_tracker] Supabase rechazó el insert ({r.status_code}): {r.text}")
     except Exception as e:
-        logger.error(f"[costs_tracker] Error al guardar costo: {e}")
+        logger.error(f"[costs_tracker] Error de red al guardar costo: {e}")
     return cost
 
 
