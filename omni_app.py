@@ -9,6 +9,8 @@ import io
 import pypdf
 import logging
 import sys
+import time
+from collections import defaultdict
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,6 +43,20 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 # CLAVES DE SUPABASE PARA LOGS EN SEGUNDO PLANO
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
+# --- RATE LIMITING (simple in-memory — 60 req/min por IP) ---
+_rate_limit_store: Dict[str, list] = defaultdict(list)
+_RATE_LIMIT = 60
+_RATE_WINDOW = 60  # segundos
+
+def _check_rate_limit(ip: str) -> bool:
+    now = time.time()
+    calls = _rate_limit_store[ip]
+    _rate_limit_store[ip] = [t for t in calls if now - t < _RATE_WINDOW]
+    if len(_rate_limit_store[ip]) >= _RATE_LIMIT:
+        return False
+    _rate_limit_store[ip].append(now)
+    return True
 
 # --- INICIALIZACIÓN DE LA APLICACIÓN FASTAPI ---
 app = FastAPI(title="OmniQuery API")
@@ -78,7 +94,13 @@ class DebateRequest(BaseModel):
     dissidenceContext: Optional[Dict] = None
     isDocument: bool = False
     creative_mode: bool = False
+    foda_mode: bool = True
     lang: str = 'en'
+
+class FeedbackRequest(BaseModel):
+    rating: int          # 1-5
+    comment: Optional[str] = None
+    query_id: Optional[str] = None
 
 class SemanticConsensusRequest(BaseModel):
     responses: Dict[str, str]
@@ -211,6 +233,8 @@ _LABELS = {
         'task_critique_body': 'Analiza críticamente las respuestas de tus colegas EN RELACIÓN A LA CONSULTA ORIGINAL. Identifica fortalezas, debilidades y puntos ciegos. Refina y mejora tu propio argumento incorporando las perspectivas valiosas para enriquecer el análisis global.',
         'task_refine_body': 'El usuario ha dado nuevas instrucciones (detalladas en la consulta principal). Tu objetivo es integrar estas directivas. Reformula tu análisis para alinearte con la guía del usuario, manteniendo los consensos ya logrados y abordando las diferencias críticas señaladas.',
         'lang_instruction': 'IMPORTANTE: Responde SIEMPRE en español, que es el idioma en que el usuario escribió su consulta.',
+        'ambiguity_instruction': 'IMPORTANTE: Si la consulta es ambigua o le falta contexto, NO pidas aclaraciones. En cambio, enuncia brevemente tus supuestos de interpretación al inicio de tu respuesta y procede con tu mejor análisis.',
+        'foda_suppress': 'IMPORTANTE: NO uses el esquema FODA/SWOT ni listes Fortalezas/Debilidades/Oportunidades/Amenazas. Entrega un análisis directo y argumentado.',
     },
     'en': {
         'original_query':   'Original User Query',
@@ -223,6 +247,8 @@ _LABELS = {
         'task_critique_body': 'Critically analyze your colleagues\' responses IN RELATION TO THE ORIGINAL QUERY. Identify strengths, weaknesses and blind spots. Refine and improve your own argument by incorporating valuable perspectives to enrich the overall analysis.',
         'task_refine_body': 'The user has given new instructions (detailed in the main query). Your goal is to integrate these directives. Reformulate your analysis to align with the user\'s guidance, maintaining established consensus and addressing the critical differences indicated.',
         'lang_instruction': 'IMPORTANT: Always respond in English, which is the language the user used in their query.',
+        'ambiguity_instruction': 'IMPORTANT: If the query is ambiguous or lacks sufficient context, do NOT ask for clarification. Instead, briefly state your interpretation assumptions at the beginning of your response and proceed with your best analysis.',
+        'foda_suppress': 'IMPORTANT: Do NOT use a SWOT/FODA framework or list Strengths/Weaknesses/Opportunities/Threats. Deliver a direct, well-argued analysis instead.',
     },
 }
 
@@ -634,8 +660,19 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     if request.dissidenceContext:
         contextual_prompt = build_enhanced_dialectic_prompt(contextual_prompt, request.dissidenceContext)
 
+    if not _check_rate_limit(client_ip):
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait a moment.")
+
     lbl = _LABELS.get(request.lang, _LABELS['en'])
-    initial_prompt = contextual_prompt + (_CREATIVE_INITIAL.get(request.lang, _CREATIVE_INITIAL['en']) if request.creative_mode else "")
+
+    # Instrucción de ambigüedad (siempre activa)
+    ambiguity_suffix = f"\n\n{lbl['ambiguity_instruction']}"
+    # Instrucción de FODA (solo cuando el usuario lo desactiva)
+    foda_suffix = f"\n\n{lbl['foda_suppress']}" if not request.foda_mode else ""
+
+    initial_prompt = contextual_prompt + ambiguity_suffix + foda_suffix + (
+        _CREATIVE_INITIAL.get(request.lang, _CREATIVE_INITIAL['en']) if request.creative_mode else ""
+    )
 
     raw = {k: (v.get('content', '') if isinstance(v, dict) else v) for k, v in (request.initial_responses or {}).items()}
     if raw and any(v.strip() for v in raw.values()):
@@ -705,6 +742,37 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     final_synthesis = await call_ai_model_no_stream('gemini', synthesis_prompt, endpoint="/api/debate")
     background_tasks.add_task(log_user_query_supabase, "/api/debate", request.prompt, {"isDocument": request.isDocument, "ip_usuario": client_ip}, sintesis=final_synthesis)
     return { "revised": revised_responses, "synthesis": final_synthesis, "initial": initial_responses, "dissidenceContext": request.dissidenceContext, "creative_mode": request.creative_mode }
+
+@app.post('/api/feedback')
+async def submit_feedback(request: FeedbackRequest):
+    """Recibe feedback del usuario sobre la calidad de una respuesta (rating 1-5)."""
+    if not 1 <= request.rating <= 5:
+        raise HTTPException(status_code=422, detail="Rating must be between 1 and 5.")
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return {"status": "ok", "message": "Feedback received (not persisted — Supabase not configured)."}
+    try:
+        payload = {
+            "timestamp": datetime.now().isoformat(),
+            "rating":    request.rating,
+            "comment":   request.comment or "",
+            "query_id":  request.query_id or "",
+        }
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.post(
+                f"{SUPABASE_URL}/rest/v1/llm_feedback",
+                headers={
+                    "apikey": SUPABASE_KEY,
+                    "Authorization": f"Bearer {SUPABASE_KEY}",
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal",
+                },
+                json=payload,
+            )
+            if r.status_code not in (200, 201):
+                logger.error(f"[feedback] Supabase error ({r.status_code}): {r.text}")
+    except Exception as e:
+        logger.error(f"[feedback] Error: {e}")
+    return {"status": "ok"}
 
 @app.post('/api/semantic-consensus')
 async def semantic_consensus_endpoint(request: SemanticConsensusRequest):

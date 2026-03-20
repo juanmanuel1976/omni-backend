@@ -245,6 +245,11 @@
                     <span data-i18n="creative.toggle">Modo Creativo</span>
                     <span id="creative-mode-status" class="text-xs px-1.5 py-0.5 bg-gray-700 rounded text-gray-400">OFF</span>
                 </button>
+                <button id="foda-mode-toggle" onclick="toggleFodaMode()" data-i18n-title="foda.tooltip" class="flex items-center gap-2 px-4 py-2 bg-gray-900 border border-green-600 text-green-400 rounded-lg text-sm hover:border-green-400 hover:text-green-200 transition-colors">
+                    <span>⊞</span>
+                    <span data-i18n="foda.toggle">FODA</span>
+                    <span id="foda-mode-status" class="text-xs px-1.5 py-0.5 bg-green-900 text-green-300 rounded">ON</span>
+                </button>
                 <span class="text-xs text-gray-500" data-i18n="creative.desc">Perspectivas en tensión real</span>
             </div>
 
@@ -478,6 +483,7 @@
         window.API_BASE_URL = 'https://omni-backend-dev.onrender.com';
         window.PLAN = localStorage.getItem('crisalia_plan') || 'free'; // 'free' | 'pro'
         window.CREATIVE_MODE = false;
+        window.FODA_MODE = true;
         window.toggleCreativeMode = function() {
             window.CREATIVE_MODE = !window.CREATIVE_MODE;
             const btn = document.getElementById('creative-mode-toggle');
@@ -490,6 +496,22 @@
             } else {
                 btn.classList.replace('border-violet-500', 'border-gray-600');
                 btn.classList.replace('text-violet-300', 'text-gray-400');
+                status.textContent = 'OFF';
+                status.className = 'text-xs px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded';
+            }
+        };
+        window.toggleFodaMode = function() {
+            window.FODA_MODE = !window.FODA_MODE;
+            const btn = document.getElementById('foda-mode-toggle');
+            const status = document.getElementById('foda-mode-status');
+            if (window.FODA_MODE) {
+                btn.classList.replace('border-gray-600', 'border-green-600');
+                btn.classList.replace('text-gray-400', 'text-green-400');
+                status.textContent = 'ON';
+                status.className = 'text-xs px-1.5 py-0.5 bg-green-900 text-green-300 rounded';
+            } else {
+                btn.classList.replace('border-green-600', 'border-gray-600');
+                btn.classList.replace('text-green-400', 'text-gray-400');
                 status.textContent = 'OFF';
                 status.className = 'text-xs px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded';
             }
@@ -993,7 +1015,7 @@ if (hasPDF) {
             try {
                 const response = await fetchWithRetries(`${API_BASE_URL}/api/debate`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt: state.prompt, history: state.history, creative_mode: window.CREATIVE_MODE, lang: localStorage.getItem('crisalia_lang') || 'en' }),
+                    body: JSON.stringify({ prompt: state.prompt, history: state.history, creative_mode: window.CREATIVE_MODE, foda_mode: window.FODA_MODE, lang: localStorage.getItem('crisalia_lang') || 'en' }),
                 });
                 updateTimeline(3);
                 clearTimeout(analysisTimeout);

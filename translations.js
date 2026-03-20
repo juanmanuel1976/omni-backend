@@ -44,9 +44,9 @@ const TRANSLATIONS = {
     'features.docs_desc': 'Procesa informes extensos, papers académicos o contratos. Arroja tus `.pdf`, `.txt`, y `.md` y deja que Crisalia extraiga la inteligencia.',
     'features.trace_title': 'Trazabilidad del Razonamiento',
     'features.trace_desc': 'Auditabilidad total. La síntesis final utiliza un código de colores para trazar cada idea hasta su modelo de origen, eliminando la "caja negra" del análisis.',
-    'features.source_gemini': 'Aporte: Gemini',
-    'features.source_deepseek': 'Aporte: Deepseek',
-    'features.source_claude': 'Aporte: Claude',
+    'features.source_gemini': 'Perspectiva Analítica',
+    'features.source_deepseek': 'Perspectiva Crítica',
+    'features.source_claude': 'Perspectiva Sintetizadora',
 
     // App-specific features section
     'features.smart_consensus_title': 'Métrica de Consenso Inteligente',
@@ -187,6 +187,8 @@ const TRANSLATIONS = {
     'creative.desc': 'Perspectivas en tensión real',
     'creative.badge': '✦ Modo Creativo',
     'creative.tooltip': 'Los modelos exploran múltiples perspectivas en tensión antes de responder, en lugar de responder desde un único ángulo. Aumenta la diversidad genuina del debate.',
+    'foda.toggle': 'FODA',
+    'foda.tooltip': 'Activa o desactiva el análisis FODA/SWOT estructurado. ON: los modelos pueden usar Fortalezas/Debilidades/Oportunidades/Amenazas. OFF: análisis directo y argumentado sin esa estructura.',
     'refine.summary_title': 'Resumen de Puntos Clave',
     'refine.report_title': 'Síntesis Estratégica',
     'refine.report_refined_title': 'Síntesis Estratégica Refinada',
@@ -274,9 +276,9 @@ const TRANSLATIONS = {
     'features.docs_desc': 'Process extensive reports, academic papers, or contracts. Upload your `.pdf`, `.txt`, and `.md` files and let Crisalia extract the intelligence.',
     'features.trace_title': 'Reasoning Traceability',
     'features.trace_desc': 'Full auditability. The final synthesis uses color-coding to trace each idea back to its source model, eliminating the "black box" of analysis.',
-    'features.source_gemini': 'Source: Gemini',
-    'features.source_deepseek': 'Source: Deepseek',
-    'features.source_claude': 'Source: Claude',
+    'features.source_gemini': 'Analytical Perspective',
+    'features.source_deepseek': 'Critical Perspective',
+    'features.source_claude': 'Synthesizing Perspective',
 
     // App-specific features section
     'features.smart_consensus_title': 'Intelligent Consensus Metric',
@@ -417,6 +419,8 @@ const TRANSLATIONS = {
     'creative.desc': 'Perspectives in real tension',
     'creative.badge': '✦ Creative Mode',
     'creative.tooltip': 'Models explore multiple perspectives in genuine tension before responding, instead of answering from a single angle. Increases real diversity in the debate.',
+    'foda.toggle': 'SWOT',
+    'foda.tooltip': 'Toggle SWOT/FODA structured analysis. ON: models may use Strengths/Weaknesses/Opportunities/Threats. OFF: direct, argument-based analysis without that structure.',
     'refine.summary_title': 'Key Points Summary',
     'refine.report_title': 'Strategic Synthesis',
     'refine.report_refined_title': 'Refined Strategic Synthesis',
