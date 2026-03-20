@@ -77,6 +77,7 @@ class DebateRequest(BaseModel):
     initial_responses: Optional[Dict[str, str]] = None
     dissidenceContext: Optional[Dict] = None
     isDocument: bool = False
+    creative_mode: bool = False
 
 class SemanticConsensusRequest(BaseModel):
     responses: Dict[str, str]
@@ -161,6 +162,22 @@ async def get_text_from_files(files: List[UploadFile]) -> str:
             raise
     logger.info(f"Texto total extraído: {len(text)} caracteres")
     return text
+
+# --- MODO CREATIVO — instrucciones aprobadas por el Tribunal (85-90% consenso) ---
+_CREATIVE_INITIAL = """
+
+**[MODO CREATIVO ACTIVADO]**
+Antes de responder, explorá múltiples perspectivas en tensión sobre este tema, destacando al menos dos marcos analíticos relevantes. Para cada perspectiva que adoptes, anticipá la objeción más fuerte específica a este caso que alguien desde el otro marco te haría, y respondela. Luego desarrollá tu análisis integrando esa tensión real. Mantené la misma extensión que tu respuesta habitual."""
+
+_CREATIVE_CRITIQUE = """
+
+**[MODO CREATIVO — ronda crítica]**
+Evaluá los marcos analíticos del otro modelo: ¿cuáles incorporás a tu análisis? ¿Cuáles rechazás y por qué? Señalá explícitamente dónde hay conflicto irreconciliable entre perspectivas."""
+
+_CREATIVE_SYNTHESIS = """
+
+**[MODO CREATIVO — síntesis]**
+Los modelos exploraron múltiples perspectivas en tensión. En tu síntesis, identificá qué perspectivas genuinamente diversas emergieron del debate y cuáles convergieron. Destacá la tensión más productiva que enriquece la respuesta final."""
 
 # --- LÓGICA DE PROMPTS ---
 def build_contextual_prompt(user_prompt, history, mode, isDocument=False):
@@ -570,10 +587,12 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     if request.dissidenceContext:
         contextual_prompt = build_enhanced_dialectic_prompt(contextual_prompt, request.dissidenceContext)
 
+    initial_prompt = contextual_prompt + (_CREATIVE_INITIAL if request.creative_mode else "")
+
     if request.initial_responses:
         initial_responses = {k: v.get('content', '') if isinstance(v, dict) else v for k, v in request.initial_responses.items()}
     else:
-        initial_tasks = [call_ai_model_no_stream(m, contextual_prompt, endpoint="/api/debate") for m in ['gemini', 'deepseek', 'claude']]
+        initial_tasks = [call_ai_model_no_stream(m, initial_prompt, endpoint="/api/debate") for m in ['gemini', 'deepseek', 'claude']]
         results = await asyncio.gather(*initial_tasks)
         initial_responses = {'gemini': results[0], 'deepseek': results[1], 'claude': results[2]}
 
@@ -585,6 +604,8 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
         context = "\n\n".join([f"**Respuesta de {m.title()}:**\n{r}" for m, r in initial_responses.items() if m != model])
         if not is_refinement_iteration:
             base_critique = f"""**Tu Respuesta Inicial:**\n{initial_responses[model]}\n\n**Respuestas de Colegas:**\n{context}\n\n**Tu Tarea (Ronda 1 - Crítica Abierta):** Analiza críticamente las respuestas de tus colegas. Identifica fortalezas, debilidades y puntos ciegos. Refina y mejora tu propio argumento incorporando las perspectivas valiosas para enriquecer el análisis global."""
+            if request.creative_mode:
+                base_critique += _CREATIVE_CRITIQUE
         else:
             base_critique = f"""**Tu Respuesta Anterior:**\n{initial_responses[model]}\n\n**Respuestas de Colegas (Ronda Anterior):**\n{context}\n\n**Tu Tarea (Ronda de Refinamiento):** El usuario ha dado nuevas instrucciones (detalladas en la consulta principal). Tu objetivo es integrar estas directivas. Reformula tu análisis para alinearte con la guía del usuario, manteniendo los consensos ya logrados y abordando las diferencias críticas señaladas."""
         critique_prompts[model] = base_critique
@@ -594,13 +615,15 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     revised_responses = dict(zip(models_order, revised_results))
     synthesis_context = "\n\n".join([f"**Argumento Revisado de {m.title()}:**\n{r}" for m, r in revised_responses.items()])
     synthesis_prompt = f"**Consulta Original (con historial y directivas de refinamiento):**\n{contextual_prompt}\n\n**Debate de Expertos (Argumentos Revisados):**\n{synthesis_context}\n\n**Tu Tarea Final como Moderador:** Eres un experto en síntesis estratégica. Tu objetivo es crear un informe final unificado y coherente. Integra los argumentos revisados de los expertos en una única respuesta. Asegúrate de seguir TODAS las instrucciones y directivas de refinamiento dadas en la consulta original. La síntesis debe ser clara, accionable y responder directamente a la petición del usuario. **IMPORTANTE: Responde siempre en el mismo idioma que usó el usuario en su consulta original.**"
+    if request.creative_mode:
+        synthesis_prompt += _CREATIVE_SYNTHESIS
 
     if request.dissidenceContext and request.dissidenceContext.get('forcedSynthesis'):
         synthesis_prompt += "\n\n**INSTRUCCIÓN ESPECIAL DE SÍNTESIS FORZADA:** El usuario ha solicitado finalizar el debate. Enfócate en los consensos existentes y presenta las diferencias restantes como perspectivas complementarias o áreas para futura exploración, no como conflictos a resolver. El objetivo es entregar un resultado accionable con la información disponible."
 
     final_synthesis = await call_ai_model_no_stream('gemini', synthesis_prompt, endpoint="/api/debate")
     background_tasks.add_task(log_user_query_supabase, "/api/debate", request.prompt, {"isDocument": request.isDocument, "ip_usuario": client_ip}, sintesis=final_synthesis)
-    return { "revised": revised_responses, "synthesis": final_synthesis, "initial": initial_responses, "dissidenceContext": request.dissidenceContext }
+    return { "revised": revised_responses, "synthesis": final_synthesis, "initial": initial_responses, "dissidenceContext": request.dissidenceContext, "creative_mode": request.creative_mode }
 
 @app.post('/api/semantic-consensus')
 async def semantic_consensus_endpoint(request: SemanticConsensusRequest):

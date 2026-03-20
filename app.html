@@ -239,7 +239,16 @@
                 <div class="text-sm text-gray-400 bg-gray-900/50 p-3 rounded-md border border-gray-700" data-i18n="dialectic.note"><strong class="text-violet-300">Note:</strong> If the initial consensus does not reach your desired level, the system will automatically suggest refinement prompts to improve convergence between AI models.</div>
             </div>
 
-            <button id="generate-btn" class="mt-6 w-full px-6 py-3 bg-violet-600 text-white font-bold rounded-lg hover:bg-violet-700 disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors duration-300 text-base" data-i18n="step1.generate_btn">Start Analysis</button>
+            <div class="mt-5 flex items-center gap-3">
+                <button id="creative-mode-toggle" onclick="toggleCreativeMode()" class="flex items-center gap-2 px-4 py-2 bg-gray-900 border border-gray-600 text-gray-400 rounded-lg text-sm hover:border-violet-500 hover:text-violet-300 transition-colors">
+                    <span>✦</span>
+                    <span data-i18n="creative.toggle">Modo Creativo</span>
+                    <span id="creative-mode-status" class="text-xs px-1.5 py-0.5 bg-gray-700 rounded text-gray-400">OFF</span>
+                </button>
+                <span class="text-xs text-gray-500" data-i18n="creative.desc">Perspectivas en tensión real</span>
+            </div>
+
+            <button id="generate-btn" class="mt-4 w-full px-6 py-3 bg-violet-600 text-white font-bold rounded-lg hover:bg-violet-700 disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors duration-300 text-base" data-i18n="step1.generate_btn">Start Analysis</button>
         </section>
 
         <section id="process-timeline-container" class="hidden card-glow p-6 mb-8 fade-in">
@@ -468,6 +477,23 @@
         }
         window.API_BASE_URL = 'https://omni-backend-dev.onrender.com';
         window.PLAN = localStorage.getItem('crisalia_plan') || 'free'; // 'free' | 'pro'
+        window.CREATIVE_MODE = false;
+        window.toggleCreativeMode = function() {
+            window.CREATIVE_MODE = !window.CREATIVE_MODE;
+            const btn = document.getElementById('creative-mode-toggle');
+            const status = document.getElementById('creative-mode-status');
+            if (window.CREATIVE_MODE) {
+                btn.classList.replace('border-gray-600', 'border-violet-500');
+                btn.classList.replace('text-gray-400', 'text-violet-300');
+                status.textContent = 'ON';
+                status.className = 'text-xs px-1.5 py-0.5 bg-violet-900 text-violet-300 rounded';
+            } else {
+                btn.classList.replace('border-violet-500', 'border-gray-600');
+                btn.classList.replace('text-violet-300', 'text-gray-400');
+                status.textContent = 'OFF';
+                status.className = 'text-xs px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded';
+            }
+        };
         window.state = {}; // << Corrección principal para el error.
         var dom = {};
         var analysisTimeout;
@@ -967,7 +993,7 @@ if (hasPDF) {
             try {
                 const response = await fetchWithRetries(`${API_BASE_URL}/api/debate`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt: state.prompt, history: state.history }),
+                    body: JSON.stringify({ prompt: state.prompt, history: state.history, creative_mode: window.CREATIVE_MODE }),
                 });
                 updateTimeline(3);
                 clearTimeout(analysisTimeout);
@@ -985,7 +1011,10 @@ if (hasPDF) {
                 state.history.push({ prompt: state.prompt, synthesis: result.synthesis });
                 dom.finalResultContainer.classList.remove('hidden');
                 const highlightedHTML = await highlightSynthesisSources(state.synthesis);
-                dom.finalResultContainer.innerHTML = templates.finalResultCard(t('debate.synthesis_title'), highlightedHTML);
+                const debateTitle = result.creative_mode
+                    ? `${t('debate.synthesis_title')} <span class="text-xs px-2 py-0.5 bg-violet-900/60 text-violet-300 rounded-full ml-2 font-normal">✦ Modo Creativo</span>`
+                    : t('debate.synthesis_title');
+                dom.finalResultContainer.innerHTML = templates.finalResultCard(debateTitle, highlightedHTML);
                 dom.finalResultContainer.scrollIntoView({behavior: 'smooth', block: 'start' });
                 attachFinalCardListeners();
                 updateTimeline(4);
