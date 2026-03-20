@@ -637,9 +637,12 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     lbl = _LABELS.get(request.lang, _LABELS['en'])
     initial_prompt = contextual_prompt + (_CREATIVE_INITIAL.get(request.lang, _CREATIVE_INITIAL['en']) if request.creative_mode else "")
 
-    if request.initial_responses:
-        initial_responses = {k: v.get('content', '') if isinstance(v, dict) else v for k, v in request.initial_responses.items()}
+    raw = {k: (v.get('content', '') if isinstance(v, dict) else v) for k, v in (request.initial_responses or {}).items()}
+    if raw and any(v.strip() for v in raw.values()):
+        # El frontend pasó respuestas reales — usarlas
+        initial_responses = raw
     else:
+        # Sin respuestas previas (debate mode directo) — generar desde cero
         initial_tasks = [call_ai_model_no_stream(m, initial_prompt, endpoint="/api/debate") for m in ['gemini', 'deepseek', 'claude']]
         results = await asyncio.gather(*initial_tasks)
         initial_responses = {'gemini': results[0], 'deepseek': results[1], 'claude': results[2]}
