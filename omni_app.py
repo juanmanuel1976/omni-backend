@@ -78,6 +78,7 @@ class DebateRequest(BaseModel):
     dissidenceContext: Optional[Dict] = None
     isDocument: bool = False
     creative_mode: bool = False
+    lang: str = 'en'
 
 class SemanticConsensusRequest(BaseModel):
     responses: Dict[str, str]
@@ -164,20 +165,66 @@ async def get_text_from_files(files: List[UploadFile]) -> str:
     return text
 
 # --- MODO CREATIVO — instrucciones aprobadas por el Tribunal (85-90% consenso) ---
-_CREATIVE_INITIAL = """
+_CREATIVE_INITIAL = {
+    'es': """
 
 **[MODO CREATIVO ACTIVADO]**
-Antes de responder, explorá múltiples perspectivas en tensión sobre este tema, destacando al menos dos marcos analíticos relevantes. Para cada perspectiva que adoptes, anticipá la objeción más fuerte específica a este caso que alguien desde el otro marco te haría, y respondela. Luego desarrollá tu análisis integrando esa tensión real. Mantené la misma extensión que tu respuesta habitual."""
+Antes de responder, explorá múltiples perspectivas en tensión sobre este tema, destacando al menos dos marcos analíticos relevantes. Para cada perspectiva que adoptes, anticipá la objeción más fuerte específica a este caso que alguien desde el otro marco te haría, y respondela. Luego desarrollá tu análisis integrando esa tensión real. Mantené la misma extensión que tu respuesta habitual.""",
+    'en': """
 
-_CREATIVE_CRITIQUE = """
+**[CREATIVE MODE ACTIVE]**
+Before answering, explore multiple perspectives in tension on this topic, highlighting at least two relevant analytical frameworks. For each perspective you adopt, anticipate the strongest objection specific to this case that someone from the other framework would raise, and respond to it. Then develop your analysis integrating that real tension. Keep the same length as your usual response.""",
+}
+
+_CREATIVE_CRITIQUE = {
+    'es': """
 
 **[MODO CREATIVO — ronda crítica]**
-Evaluá los marcos analíticos del otro modelo: ¿cuáles incorporás a tu análisis? ¿Cuáles rechazás y por qué? Señalá explícitamente dónde hay conflicto irreconciliable entre perspectivas."""
+Evaluá los marcos analíticos del otro modelo: ¿cuáles incorporás a tu análisis? ¿Cuáles rechazás y por qué? Señalá explícitamente dónde hay conflicto irreconciliable entre perspectivas.""",
+    'en': """
 
-_CREATIVE_SYNTHESIS = """
+**[CREATIVE MODE — critique round]**
+Evaluate the other model's analytical frameworks: which ones do you incorporate into your analysis? Which do you reject and why? Explicitly identify where there is an irreconcilable conflict between perspectives.""",
+}
+
+_CREATIVE_SYNTHESIS = {
+    'es': """
 
 **[MODO CREATIVO — síntesis]**
-Los modelos exploraron múltiples perspectivas en tensión. En tu síntesis, identificá qué perspectivas genuinamente diversas emergieron del debate y cuáles convergieron. Destacá la tensión más productiva que enriquece la respuesta final."""
+Los modelos exploraron múltiples perspectivas en tensión. En tu síntesis, identificá qué perspectivas genuinamente diversas emergieron del debate y cuáles convergieron. Destacá la tensión más productiva que enriquece la respuesta final.""",
+    'en': """
+
+**[CREATIVE MODE — synthesis]**
+The models explored multiple perspectives in tension. In your synthesis, identify which genuinely diverse perspectives emerged from the debate and which converged. Highlight the most productive tension that enriches the final response.""",
+}
+
+# --- LABELS LOCALIZADOS para prompts internos ---
+_LABELS = {
+    'es': {
+        'original_query':   'Consulta Original del Usuario',
+        'initial_response': 'Tu Respuesta Inicial',
+        'colleagues':       'Respuestas de Colegas',
+        'prev_response':    'Tu Respuesta Anterior',
+        'prev_colleagues':  'Respuestas de Colegas (Ronda Anterior)',
+        'task_critique':    'Tu Tarea (Ronda 1 - Crítica Abierta)',
+        'task_refine':      'Tu Tarea (Ronda de Refinamiento)',
+        'task_critique_body': 'Analiza críticamente las respuestas de tus colegas EN RELACIÓN A LA CONSULTA ORIGINAL. Identifica fortalezas, debilidades y puntos ciegos. Refina y mejora tu propio argumento incorporando las perspectivas valiosas para enriquecer el análisis global.',
+        'task_refine_body': 'El usuario ha dado nuevas instrucciones (detalladas en la consulta principal). Tu objetivo es integrar estas directivas. Reformula tu análisis para alinearte con la guía del usuario, manteniendo los consensos ya logrados y abordando las diferencias críticas señaladas.',
+        'lang_instruction': 'IMPORTANTE: Responde SIEMPRE en español, que es el idioma en que el usuario escribió su consulta.',
+    },
+    'en': {
+        'original_query':   'Original User Query',
+        'initial_response': 'Your Initial Response',
+        'colleagues':       'Colleagues\' Responses',
+        'prev_response':    'Your Previous Response',
+        'prev_colleagues':  'Colleagues\' Responses (Previous Round)',
+        'task_critique':    'Your Task (Round 1 - Open Critique)',
+        'task_refine':      'Your Task (Refinement Round)',
+        'task_critique_body': 'Critically analyze your colleagues\' responses IN RELATION TO THE ORIGINAL QUERY. Identify strengths, weaknesses and blind spots. Refine and improve your own argument by incorporating valuable perspectives to enrich the overall analysis.',
+        'task_refine_body': 'The user has given new instructions (detailed in the main query). Your goal is to integrate these directives. Reformulate your analysis to align with the user\'s guidance, maintaining established consensus and addressing the critical differences indicated.',
+        'lang_instruction': 'IMPORTANT: Always respond in English, which is the language the user used in their query.',
+    },
+}
 
 # --- LÓGICA DE PROMPTS ---
 def build_contextual_prompt(user_prompt, history, mode, isDocument=False):
@@ -587,7 +634,8 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     if request.dissidenceContext:
         contextual_prompt = build_enhanced_dialectic_prompt(contextual_prompt, request.dissidenceContext)
 
-    initial_prompt = contextual_prompt + (_CREATIVE_INITIAL if request.creative_mode else "")
+    lbl = _LABELS.get(request.lang, _LABELS['en'])
+    initial_prompt = contextual_prompt + (_CREATIVE_INITIAL.get(request.lang, _CREATIVE_INITIAL['en']) if request.creative_mode else "")
 
     if request.initial_responses:
         initial_responses = {k: v.get('content', '') if isinstance(v, dict) else v for k, v in request.initial_responses.items()}
@@ -601,28 +649,55 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     is_refinement_iteration = bool(request.dissidenceContext and request.dissidenceContext.get('userRefinementPrompt'))
 
     for model in models_order:
-        context = "\n\n".join([f"**Respuesta de {m.title()}:**\n{r}" for m, r in initial_responses.items() if m != model])
+        context = "\n\n".join([f"**{lbl['colleagues']} — {m.title()}:**\n{r}" for m, r in initial_responses.items() if m != model])
         own_response = initial_responses[model]
         if not own_response or own_response.startswith("Error"):
-            own_response = "[No initial response available / Sin respuesta inicial disponible — build your analysis directly from the original query / construí tu análisis directamente desde la consulta original]"
+            own_response = lbl['lang_instruction'].replace('IMPORTANTE:', 'NOTE:').replace('IMPORTANT:', 'NOTE:') + \
+                " [No initial response available — build your analysis directly from the original query above.]"
         if not is_refinement_iteration:
-            base_critique = f"""**Consulta Original del Usuario:**\n{contextual_prompt}\n\n**Tu Respuesta Inicial:**\n{own_response}\n\n**Respuestas de Colegas:**\n{context}\n\n**Tu Tarea (Ronda 1 - Crítica Abierta):** Analiza críticamente las respuestas de tus colegas EN RELACIÓN A LA CONSULTA ORIGINAL. Identifica fortalezas, debilidades y puntos ciegos. Refina y mejora tu propio argumento incorporando las perspectivas valiosas para enriquecer el análisis global."""
+            base_critique = (
+                f"**{lbl['original_query']}:**\n{contextual_prompt}\n\n"
+                f"**{lbl['initial_response']}:**\n{own_response}\n\n"
+                f"**{lbl['colleagues']}:**\n{context}\n\n"
+                f"**{lbl['task_critique']}:** {lbl['task_critique_body']}\n\n"
+                f"{lbl['lang_instruction']}"
+            )
             if request.creative_mode:
-                base_critique += _CREATIVE_CRITIQUE
+                base_critique += _CREATIVE_CRITIQUE.get(request.lang, _CREATIVE_CRITIQUE['en'])
         else:
-            base_critique = f"""**Consulta Original del Usuario:**\n{contextual_prompt}\n\n**Tu Respuesta Anterior:**\n{own_response}\n\n**Respuestas de Colegas (Ronda Anterior):**\n{context}\n\n**Tu Tarea (Ronda de Refinamiento):** El usuario ha dado nuevas instrucciones (detalladas en la consulta principal). Tu objetivo es integrar estas directivas. Reformula tu análisis para alinearte con la guía del usuario, manteniendo los consensos ya logrados y abordando las diferencias críticas señaladas."""
+            base_critique = (
+                f"**{lbl['original_query']}:**\n{contextual_prompt}\n\n"
+                f"**{lbl['prev_response']}:**\n{own_response}\n\n"
+                f"**{lbl['prev_colleagues']}:**\n{context}\n\n"
+                f"**{lbl['task_refine']}:** {lbl['task_refine_body']}\n\n"
+                f"{lbl['lang_instruction']}"
+            )
         critique_prompts[model] = base_critique
     
     critique_tasks = [call_ai_model_no_stream(m, critique_prompts[m], endpoint="/api/debate") for m in models_order]
     revised_results = await asyncio.gather(*critique_tasks)
     revised_responses = dict(zip(models_order, revised_results))
-    synthesis_context = "\n\n".join([f"**Argumento Revisado de {m.title()}:**\n{r}" for m, r in revised_responses.items()])
-    synthesis_prompt = f"**Consulta Original (con historial y directivas de refinamiento):**\n{contextual_prompt}\n\n**Debate de Expertos (Argumentos Revisados):**\n{synthesis_context}\n\n**Tu Tarea Final como Moderador:** Eres un experto en síntesis estratégica. Tu objetivo es crear un informe final unificado y coherente. Integra los argumentos revisados de los expertos en una única respuesta. Asegúrate de seguir TODAS las instrucciones y directivas de refinamiento dadas en la consulta original. La síntesis debe ser clara, accionable y responder directamente a la petición del usuario. **IMPORTANTE: Responde siempre en el mismo idioma que usó el usuario en su consulta original.**"
+    synthesis_context = "\n\n".join([f"**{lbl['colleagues']} — {m.title()} (revised):**\n{r}" for m, r in revised_responses.items()])
+    if request.lang == 'en':
+        synthesis_prompt = (
+            f"**Original Query (with history and refinement directives):**\n{contextual_prompt}\n\n"
+            f"**Expert Debate (Revised Arguments):**\n{synthesis_context}\n\n"
+            f"**Your Final Task as Moderator:** You are an expert in strategic synthesis. Your goal is to create a unified and coherent final report. Integrate the experts' revised arguments into a single response. Make sure to follow ALL instructions and refinement directives given in the original query. The synthesis must be clear, actionable and directly answer the user's request.\n\n"
+            f"{lbl['lang_instruction']}"
+        )
+        if request.dissidenceContext and request.dissidenceContext.get('forcedSynthesis'):
+            synthesis_prompt += "\n\n**SPECIAL FORCED SYNTHESIS INSTRUCTION:** The user has requested to finalize the debate. Focus on existing consensus and present remaining differences as complementary perspectives or areas for future exploration, not as conflicts to resolve. The goal is to deliver an actionable result with the available information."
+    else:
+        synthesis_prompt = (
+            f"**Consulta Original (con historial y directivas de refinamiento):**\n{contextual_prompt}\n\n"
+            f"**Debate de Expertos (Argumentos Revisados):**\n{synthesis_context}\n\n"
+            f"**Tu Tarea Final como Moderador:** Eres un experto en síntesis estratégica. Tu objetivo es crear un informe final unificado y coherente. Integra los argumentos revisados de los expertos en una única respuesta. Asegúrate de seguir TODAS las instrucciones y directivas de refinamiento dadas en la consulta original. La síntesis debe ser clara, accionable y responder directamente a la petición del usuario.\n\n"
+            f"{lbl['lang_instruction']}"
+        )
+        if request.dissidenceContext and request.dissidenceContext.get('forcedSynthesis'):
+            synthesis_prompt += "\n\n**INSTRUCCIÓN ESPECIAL DE SÍNTESIS FORZADA:** El usuario ha solicitado finalizar el debate. Enfócate en los consensos existentes y presenta las diferencias restantes como perspectivas complementarias o áreas para futura exploración, no como conflictos a resolver. El objetivo es entregar un resultado accionable con la información disponible."
     if request.creative_mode:
-        synthesis_prompt += _CREATIVE_SYNTHESIS
-
-    if request.dissidenceContext and request.dissidenceContext.get('forcedSynthesis'):
-        synthesis_prompt += "\n\n**INSTRUCCIÓN ESPECIAL DE SÍNTESIS FORZADA:** El usuario ha solicitado finalizar el debate. Enfócate en los consensos existentes y presenta las diferencias restantes como perspectivas complementarias o áreas para futura exploración, no como conflictos a resolver. El objetivo es entregar un resultado accionable con la información disponible."
+        synthesis_prompt += _CREATIVE_SYNTHESIS.get(request.lang, _CREATIVE_SYNTHESIS['en'])
 
     final_synthesis = await call_ai_model_no_stream('gemini', synthesis_prompt, endpoint="/api/debate")
     background_tasks.add_task(log_user_query_supabase, "/api/debate", request.prompt, {"isDocument": request.isDocument, "ip_usuario": client_ip}, sintesis=final_synthesis)

@@ -993,7 +993,7 @@ if (hasPDF) {
             try {
                 const response = await fetchWithRetries(`${API_BASE_URL}/api/debate`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt: state.prompt, history: state.history, creative_mode: window.CREATIVE_MODE }),
+                    body: JSON.stringify({ prompt: state.prompt, history: state.history, creative_mode: window.CREATIVE_MODE, lang: localStorage.getItem('crisalia_lang') || 'en' }),
                 });
                 updateTimeline(3);
                 clearTimeout(analysisTimeout);
