@@ -86,7 +86,7 @@ class FactCheckRequest(BaseModel):
     original_query: str
 
 # --- REGISTRADOR DE CONSULTAS EN SEGUNDO PLANO (SUPABASE / LOCAL FALLBACK) ---
-async def log_user_query_supabase(endpoint: str, prompt: str, extra_info: dict = None):
+async def log_user_query_supabase(endpoint: str, prompt: str, extra_info: dict = None, sintesis: str = None):
     """Guarda silenciosamente las consultas usando Background Tasks. Latencia cero para el usuario."""
     # Si aún no configuraste Supabase, usa un archivo local de respaldo
     if not SUPABASE_URL or not SUPABASE_KEY:
@@ -112,11 +112,14 @@ async def log_user_query_supabase(endpoint: str, prompt: str, extra_info: dict =
             "Content-Type": "application/json",
             "Prefer": "return=minimal"
         }
+        info = extra_info or {}
+        if sintesis:
+            info["sintesis"] = sintesis[:3000]  # truncar para evitar payloads enormes
         payload = {
             "fecha_hora": datetime.now().isoformat(),
             "endpoint": endpoint,
             "prompt": prompt,
-            "extra_info": extra_info or {}
+            "extra_info": info
         }
         async with httpx.AsyncClient(timeout=10.0) as client:
             r = await client.post(f"{SUPABASE_URL}/rest/v1/consultas_log", headers=headers, json=payload)
@@ -539,8 +542,6 @@ async def refine_and_synthesize(raw_request: Request, request: RefineRequest, ba
     x_forwarded = raw_request.headers.get("X-Forwarded-For")
     client_ip = x_forwarded.split(",")[0].strip() if x_forwarded else (raw_request.client.host if raw_request.client else "127.0.0.1")
     
-    background_tasks.add_task(log_user_query_supabase, "/api/refine", request.prompt, {"synthesis_type": request.synthesis_type, "ip_usuario": client_ip})
-
     contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'direct')
     active_responses = {k: v['content'] for k, v in request.initial_responses.items() if request.decisions.get(k) != 'discard'}
     highlighted_response = next((v['content'] for k, v in request.initial_responses.items() if request.decisions.get(k) == 'highlight'), None)
@@ -556,6 +557,7 @@ async def refine_and_synthesize(raw_request: Request, request: RefineRequest, ba
         synthesis_prompt_parts.append(f"**Respuesta de {model.title()}:**\n{content}\n")
     final_prompt = "\n".join(synthesis_prompt_parts)
     synthesis_text = await call_ai_model_no_stream('gemini', final_prompt, endpoint="/api/refine")
+    background_tasks.add_task(log_user_query_supabase, "/api/refine", request.prompt, {"synthesis_type": request.synthesis_type, "ip_usuario": client_ip}, sintesis=synthesis_text)
     return {"synthesis": synthesis_text}
 
 @app.post('/api/debate')
@@ -563,8 +565,6 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     x_forwarded = raw_request.headers.get("X-Forwarded-For")
     client_ip = x_forwarded.split(",")[0].strip() if x_forwarded else (raw_request.client.host if raw_request.client else "127.0.0.1")
     
-    background_tasks.add_task(log_user_query_supabase, "/api/debate", request.prompt, {"isDocument": request.isDocument, "ip_usuario": client_ip})
-
     contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'direct', request.isDocument)
     
     if request.dissidenceContext:
@@ -599,6 +599,7 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
         synthesis_prompt += "\n\n**INSTRUCCIÓN ESPECIAL DE SÍNTESIS FORZADA:** El usuario ha solicitado finalizar el debate. Enfócate en los consensos existentes y presenta las diferencias restantes como perspectivas complementarias o áreas para futura exploración, no como conflictos a resolver. El objetivo es entregar un resultado accionable con la información disponible."
 
     final_synthesis = await call_ai_model_no_stream('gemini', synthesis_prompt, endpoint="/api/debate")
+    background_tasks.add_task(log_user_query_supabase, "/api/debate", request.prompt, {"isDocument": request.isDocument, "ip_usuario": client_ip}, sintesis=final_synthesis)
     return { "revised": revised_responses, "synthesis": final_synthesis, "initial": initial_responses, "dissidenceContext": request.dissidenceContext }
 
 @app.post('/api/semantic-consensus')
