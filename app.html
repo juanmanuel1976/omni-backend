@@ -62,6 +62,10 @@
         .timeline-step:first-child .step-line { left: 50%; width: 50%; }
         .timeline-step:last-child .step-line { display: none; }
         .timeline-step.completed .step-line { background-color: #065F46; }
+        /* Plan free: locked overlay sobre las tarjetas de modelos */
+        .plan-locked-wrapper { position: relative; }
+        .plan-locked-blur { filter: blur(5px); pointer-events: none; opacity: 0.25; user-select: none; }
+        .plan-locked-badge { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
         .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
         .lang-switcher-btn {
@@ -463,6 +467,7 @@
             jsPDF = window.jspdf.jsPDF;
         }
         window.API_BASE_URL = 'https://omni-backend-dev.onrender.com';
+        window.PLAN = localStorage.getItem('crisalia_plan') || 'free'; // 'free' | 'pro'
         window.state = {}; // << Corrección principal para el error.
         var dom = {};
         var analysisTimeout;
@@ -518,8 +523,12 @@
                         </div>
                         <div class="text-center flex flex-wrap justify-center gap-3">
                             <button id="copy-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-semibold rounded-lg hover:bg-gray-700 transition-colors">${t('btn.copy')}</button>
-                            <button id="download-txt-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-semibold rounded-lg hover:bg-gray-700 transition-colors">${t('btn.download_txt')}</button>
-                            <button id="download-pdf-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-semibold rounded-lg hover:bg-gray-700 transition-colors">${t('btn.download_pdf')}</button>
+                            ${window.PLAN === 'free'
+                                ? `<button onclick="alert('Upgrade to Pro to download reports')" class="px-4 py-2 bg-gray-800/40 text-gray-600 font-semibold rounded-lg border border-gray-700/50 cursor-not-allowed" title="Pro only">🔒 ${t('btn.download_txt')}</button>
+                                   <button onclick="alert('Upgrade to Pro to download reports')" class="px-4 py-2 bg-gray-800/40 text-gray-600 font-semibold rounded-lg border border-gray-700/50 cursor-not-allowed" title="Pro only">🔒 ${t('btn.download_pdf')}</button>`
+                                : `<button id="download-txt-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-semibold rounded-lg hover:bg-gray-700 transition-colors">${t('btn.download_txt')}</button>
+                                   <button id="download-pdf-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-semibold rounded-lg hover:bg-gray-700 transition-colors">${t('btn.download_pdf')}</button>`
+                            }
                         </div>
                     </div>
                 </div>`,
@@ -536,6 +545,34 @@
             get direct() { return t('mode.direct'); },
             get perspectives() { return t('mode.perspectives'); },
             get debate() { return t('mode.debate'); }
+        };
+
+        window.lockedResponsesHTML = function() {
+            const fakeCard = (model, color) => `
+                <div class="card-glow p-6">
+                    <h3 class="text-lg font-bold text-white mb-3 capitalize flex items-center">
+                        <span class="w-3 h-3 rounded-full mr-2" style="background:${color}"></span>${model}
+                    </h3>
+                    <div class="space-y-2">
+                        <div class="h-3 bg-gray-700 rounded w-full"></div><div class="h-3 bg-gray-700 rounded w-5/6"></div>
+                        <div class="h-3 bg-gray-700 rounded w-4/5"></div><div class="h-3 bg-gray-700 rounded w-full"></div>
+                        <div class="h-3 bg-gray-700 rounded w-3/4"></div><div class="h-3 bg-gray-700 rounded w-5/6"></div>
+                        <div class="h-3 bg-gray-700 rounded w-full"></div><div class="h-3 bg-gray-700 rounded w-2/3"></div>
+                    </div>
+                </div>`;
+            return `<div class="plan-locked-wrapper col-span-1 md:col-span-3">
+                <div class="plan-locked-blur grid grid-cols-1 md:grid-cols-3 gap-4">
+                    ${fakeCard('gemini','#4285F4')}${fakeCard('deepseek','#34A853')}${fakeCard('claude','#D48105')}
+                </div>
+                <div class="plan-locked-badge">
+                    <div class="bg-gray-900/95 border border-violet-700/50 rounded-xl p-6 text-center max-w-xs mx-4 shadow-2xl">
+                        <div class="text-3xl mb-2">🔒</div>
+                        <h3 class="text-white font-bold mb-1">Individual Reasoning — Pro Only</h3>
+                        <p class="text-gray-400 text-sm mb-4">Upgrade to see how each model reasoned your question, compare perspectives, and conduct the full multi-round debate.</p>
+                        <button onclick="alert('Upgrade coming soon — contact us!')" class="px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white font-semibold rounded-lg text-sm transition-colors">Upgrade to Pro →</button>
+                    </div>
+                </div>
+            </div>`;
         };
 
         const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'for', 'with', 'on', 'at', 'from', 'by', 'in', 'of', 'to', 'is', 'are', 'was', 'were', 'it', 'this', 'that', 'they', 'he', 'she', 'we', 'i', 'you']);
@@ -562,6 +599,14 @@
                 const bestModel = Object.keys(scores).reduce((a, b) => scores[a] > scores[b] ? a : b);
                 return `<span class="px-1 py-0.5 rounded source-${bestModel}">${sentence}</span>`;
             });
+            if (window.PLAN === 'free') {
+                const upgradeBanner = `<div class="mt-8 border border-violet-800/40 bg-violet-900/10 rounded-xl p-5 text-center">
+                    <p class="text-violet-300 font-semibold mb-1">🔒 Full Report Available on Pro</p>
+                    <p class="text-gray-400 text-sm mb-3">Upgrade to see color-coded reasoning by model, conduct multi-round debates, and download the full report.</p>
+                    <button onclick="alert('Upgrade coming soon — contact us!')" class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-lg transition-colors">Upgrade to Pro →</button>
+                </div>`;
+                return highlightedSentences.join(' ') + upgradeBanner;
+            }
             let legend = `<div class="mt-8 border-t border-gray-800 pt-4 text-sm text-gray-500"><strong>${t('label.reasoning_trace')}</strong><div class="flex flex-wrap gap-x-4 gap-y-2 mt-3"><span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#4285F4]"></span>Gemini</span><span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#34A853]"></span>DeepSeek</span><span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#D48105]"></span>Claude</span></div></div>`;
             return highlightedSentences.join(' ') + legend;
         }
@@ -870,17 +915,20 @@ if (hasPDF) {
                                         const actionsDiv = document.getElementById(`actions-${model}`);
                                         if(actionsDiv) actionsDiv.classList.remove('hidden');
                                     });
-                                    dom.step3.classList.remove('hidden');
+                                    if (window.PLAN === 'free') {
+                                        dom.responsesGrid.innerHTML = window.lockedResponsesHTML();
+                                        dom.consensusContainer.classList.add('hidden');
+                                        dom.step3.classList.add('hidden');
+                                    } else {
+                                        dom.step3.classList.remove('hidden');
+                                        if (window.dialecticEnhancements && window.dialecticEnhancements.calculateAndDisplayConsensusEnhanced) {
+                                            window.dialecticEnhancements.calculateAndDisplayConsensusEnhanced();
+                                        } else {
+                                            calculateAndDisplayConsensus();
+                                        }
+                                    }
                                     setLoading(false);
                                     updateTimeline(4);
-                                    
-                                    // Usar análisis mejorado si está disponible
-                                    if (window.dialecticEnhancements && window.dialecticEnhancements.calculateAndDisplayConsensusEnhanced) {
-                                        window.dialecticEnhancements.calculateAndDisplayConsensusEnhanced();
-                                    } else {
-                                        // Función básica de fallback
-                                        calculateAndDisplayConsensus();
-                                    }
                                     continue;
                                 }
                                 const { model, chunk } = data;

@@ -34,7 +34,14 @@ function getKeywords(text) {
 // FUNCIÓN PRINCIPAL: Análisis semántico con Claude como mediador (CORREGIDA)
 async function calculateAndDisplayConsensusEnhanced() {
     console.log('=== INICIANDO ANÁLISIS SEMÁNTICO ===');
-    
+
+    // Plan free: skip consensus display
+    if (window.PLAN === 'free') {
+        const consensusContainer = document.getElementById('consensus-container');
+        if (consensusContainer) consensusContainer.classList.add('hidden');
+        return 0;
+    }
+
     // Verificar que state existe
     if (!window.state || !window.state.initial_responses) {
         console.error('State no disponible');
@@ -588,6 +595,7 @@ async function handleForcedSynthesis() {
 
 // Función principal para manejar bajo consenso con nuevas funcionalidades - CORREGIDA
 function handleAdvancedLowConsensus(responses, consensusScore, forceShow = false) {
+    if (window.PLAN === 'free') return; // Free plan: no dissidence controls shown
     const selectedLevelInput = document.querySelector('input[name="confidenceLevel"]:checked');
     const selectedLevel = selectedLevelInput ? selectedLevelInput.value : 'balanced';
     const threshold = dialecticState.consensusThresholds[selectedLevel];
@@ -770,6 +778,10 @@ const response = await window.fetchWithRetries(`${window.API_BASE_URL}/api/debat
                 if(actionsDiv) actionsDiv.classList.add('hidden');
             }
         });
+        // Plan free: ocultar las tarjetas individuales después de llenarlas
+        if (window.PLAN === 'free' && dom.responsesGrid && window.lockedResponsesHTML) {
+            dom.responsesGrid.innerHTML = window.lockedResponsesHTML();
+        }
         if (dom.step2Header) {
             dom.step2Header.innerHTML = `<h2 class="text-2xl font-semibold mb-2 text-white">${t('debate.perspectives_completed')}</h2><p class="text-gray-400">${t('debate.perspectives_review')}</p>`;
         }
