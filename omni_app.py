@@ -602,12 +602,15 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
 
     for model in models_order:
         context = "\n\n".join([f"**Respuesta de {m.title()}:**\n{r}" for m, r in initial_responses.items() if m != model])
+        own_response = initial_responses[model]
+        if not own_response or own_response.startswith("Error"):
+            own_response = "[Sin respuesta inicial disponible — construí tu análisis directamente desde la consulta original]"
         if not is_refinement_iteration:
-            base_critique = f"""**Tu Respuesta Inicial:**\n{initial_responses[model]}\n\n**Respuestas de Colegas:**\n{context}\n\n**Tu Tarea (Ronda 1 - Crítica Abierta):** Analiza críticamente las respuestas de tus colegas. Identifica fortalezas, debilidades y puntos ciegos. Refina y mejora tu propio argumento incorporando las perspectivas valiosas para enriquecer el análisis global."""
+            base_critique = f"""**Consulta Original del Usuario:**\n{contextual_prompt}\n\n**Tu Respuesta Inicial:**\n{own_response}\n\n**Respuestas de Colegas:**\n{context}\n\n**Tu Tarea (Ronda 1 - Crítica Abierta):** Analiza críticamente las respuestas de tus colegas EN RELACIÓN A LA CONSULTA ORIGINAL. Identifica fortalezas, debilidades y puntos ciegos. Refina y mejora tu propio argumento incorporando las perspectivas valiosas para enriquecer el análisis global."""
             if request.creative_mode:
                 base_critique += _CREATIVE_CRITIQUE
         else:
-            base_critique = f"""**Tu Respuesta Anterior:**\n{initial_responses[model]}\n\n**Respuestas de Colegas (Ronda Anterior):**\n{context}\n\n**Tu Tarea (Ronda de Refinamiento):** El usuario ha dado nuevas instrucciones (detalladas en la consulta principal). Tu objetivo es integrar estas directivas. Reformula tu análisis para alinearte con la guía del usuario, manteniendo los consensos ya logrados y abordando las diferencias críticas señaladas."""
+            base_critique = f"""**Consulta Original del Usuario:**\n{contextual_prompt}\n\n**Tu Respuesta Anterior:**\n{own_response}\n\n**Respuestas de Colegas (Ronda Anterior):**\n{context}\n\n**Tu Tarea (Ronda de Refinamiento):** El usuario ha dado nuevas instrucciones (detalladas en la consulta principal). Tu objetivo es integrar estas directivas. Reformula tu análisis para alinearte con la guía del usuario, manteniendo los consensos ya logrados y abordando las diferencias críticas señaladas."""
         critique_prompts[model] = base_critique
     
     critique_tasks = [call_ai_model_no_stream(m, critique_prompts[m], endpoint="/api/debate") for m in models_order]
