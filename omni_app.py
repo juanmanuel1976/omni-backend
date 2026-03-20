@@ -39,6 +39,7 @@ MODEL_TIMEOUT_VALIDATION = 55.0  # max 7 llamadas x 55s = 385s < 600s limite Ren
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 # CLAVES DE SUPABASE PARA LOGS EN SEGUNDO PLANO
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -404,6 +405,65 @@ async def stream_claude(prompt, endpoint="unknown"):
     except Exception as e:
         yield {"model": "claude", "chunk": f"Error: {e}"}
 
+async def call_gpt_judge(original_query: str, anonymous_summary: str, synthesis: str, lang: str = 'en') -> dict:
+    """GPT actúa como juez ciego: recibe la pregunta + resumen anónimo del debate + síntesis final.
+    Devuelve score 1-10 y observación sin saber qué modelos participaron."""
+    if not OPENAI_API_KEY:
+        return {"score": None, "observation": "GPT judge not configured."}
+    if lang == 'es':
+        prompt = f"""Eres un evaluador externo experto. Se te proporciona:
+1. Una pregunta o consulta original
+2. Un resumen de los argumentos clave que surgieron en un análisis (sin identificar quién los aportó)
+3. Una síntesis final que integra esos argumentos
+
+Tu tarea: evaluar si la síntesis final responde bien la pregunta original y aprovecha los argumentos del debate.
+
+**Pregunta original:**
+{original_query}
+
+**Resumen del debate (anónimo):**
+{anonymous_summary}
+
+**Síntesis final:**
+{synthesis}
+
+Respondé en formato JSON exacto:
+{{"score": <número del 1 al 10>, "observation": "<una sola oración con tu evaluación>", "missed": "<qué punto importante del debate no capturó la síntesis, o 'ninguno' si está completa>"}}"""
+    else:
+        prompt = f"""You are an expert external evaluator. You are given:
+1. An original question or query
+2. A summary of key arguments that emerged in an analysis (without identifying who contributed them)
+3. A final synthesis that integrates those arguments
+
+Your task: evaluate whether the final synthesis properly answers the original question and captures the debate arguments.
+
+**Original question:**
+{original_query}
+
+**Debate summary (anonymous):**
+{anonymous_summary}
+
+**Final synthesis:**
+{synthesis}
+
+Respond in exact JSON format:
+{{"score": <number from 1 to 10>, "observation": "<single sentence with your evaluation>", "missed": "<what important debate point the synthesis missed, or 'none' if complete>"}}"""
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+                json={"model": "gpt-4o", "messages": [{"role": "user", "content": prompt}],
+                      "max_tokens": 300, "temperature": 0.3, "response_format": {"type": "json_object"}},
+            )
+            data = r.json()
+            content = data["choices"][0]["message"]["content"]
+            return json.loads(content)
+    except Exception as e:
+        logger.error(f"[gpt_judge] Error: {e}")
+        return {"score": None, "observation": f"Error: {e}"}
+
+
 async def call_ai_model_no_stream(model_name: str, prompt: str, timeout: float = 360.0, endpoint: str = "unknown"):
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -751,7 +811,16 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
 
     final_synthesis = await call_ai_model_no_stream('gemini', synthesis_prompt, endpoint="/api/debate")
     background_tasks.add_task(log_user_query_supabase, "/api/debate", request.prompt, {"isDocument": request.isDocument, "ip_usuario": client_ip}, sintesis=final_synthesis)
-    return { "revised": revised_responses, "synthesis": final_synthesis, "initial": initial_responses, "dissidenceContext": request.dissidenceContext, "creative_mode": request.creative_mode }
+
+    # GPT juez ciego — resumen anónimo del debate sin atribuir modelos
+    debate_points = list(revised_responses.values())
+    anonymous_summary = "\n\n".join([
+        f"- Perspectiva {i+1}: {p[:500]}..." if len(p) > 500 else f"- Perspectiva {i+1}: {p}"
+        for i, p in enumerate(debate_points)
+    ])
+    gpt_evaluation = await call_gpt_judge(request.prompt, anonymous_summary, final_synthesis, request.lang)
+
+    return { "revised": revised_responses, "synthesis": final_synthesis, "initial": initial_responses, "dissidenceContext": request.dissidenceContext, "creative_mode": request.creative_mode, "gpt_evaluation": gpt_evaluation }
 
 @app.post('/api/feedback')
 async def submit_feedback(request: FeedbackRequest):
