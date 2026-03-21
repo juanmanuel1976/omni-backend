@@ -18,7 +18,10 @@ from pydantic import BaseModel
 from typing import Dict, Optional, List, Any
 from anthropic import AsyncAnthropic
 from rag_manager import rag_manager
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+# Zona horaria Buenos Aires (UTC-3, sin cambio de horario)
+TZ_BA = timezone(timedelta(hours=-3))
 from ocr_processor import ocr_processor
 import sqlite3
 from contextlib import contextmanager
@@ -122,7 +125,7 @@ async def log_user_query_supabase(endpoint: str, prompt: str, extra_info: dict =
         try:
             os.makedirs("logs", exist_ok=True)
             log_entry = {
-                "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "fecha_hora": datetime.now(TZ_BA).strftime("%Y-%m-%d %H:%M:%S"),
                 "endpoint": endpoint,
                 "prompt": prompt,
                 "extra": extra_info or {}
@@ -145,7 +148,7 @@ async def log_user_query_supabase(endpoint: str, prompt: str, extra_info: dict =
         if sintesis:
             info["sintesis"] = sintesis[:3000]  # truncar para evitar payloads enormes
         payload = {
-            "fecha_hora": datetime.now().isoformat(),
+            "fecha_hora": datetime.now(TZ_BA).isoformat(),
             "endpoint": endpoint,
             "prompt": prompt,
             "extra_info": info
@@ -176,7 +179,7 @@ async def log_debate_supabase(
     try:
         gpt = gpt_evaluation or {}
         payload = {
-            "timestamp":        datetime.now().isoformat(),
+            "timestamp":        datetime.now(TZ_BA).isoformat(),
             "lang":             lang,
             "duration_ms":      duration_ms,
             "prompt":           prompt[:2000] if save_prompt else None,
@@ -899,7 +902,7 @@ async def submit_feedback(request: FeedbackRequest):
         return {"status": "ok", "message": "Feedback received (not persisted — Supabase not configured)."}
     try:
         payload = {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(TZ_BA).isoformat(),
             "rating":    request.rating,
             "comment":   request.comment or "",
             "query_id":  request.query_id or "",
@@ -1142,7 +1145,7 @@ Respondé SOLO con el JSON válido, sin texto adicional."""
 
     validation_entry = {
         "id": f"val_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(TZ_BA).isoformat(),
         "archivo": request.archivo,
         "tipo": request.tipo,
         "descripcion": request.descripcion,
@@ -1172,7 +1175,7 @@ Respondé SOLO con el JSON válido, sin texto adicional."""
 @app.post("/api/agent-step", response_model=AgentStepResponse)
 async def register_agent_step(request: AgentStepRequest):
     paso_id = f"step_{request.paso_numero:03d}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    timestamp = datetime.now().isoformat()
+    timestamp = datetime.now(TZ_BA).isoformat()
 
     step_entry = {
         "paso_id": paso_id,
@@ -1204,7 +1207,7 @@ async def get_agent_docs():
 
     return {
         "version": "1.0",
-        "generado": datetime.now().isoformat(),
+        "generado": datetime.now(TZ_BA).isoformat(),
         "estadisticas": {
             "total_pasos": len(_agent_log),
             "total_validaciones": total_validaciones,

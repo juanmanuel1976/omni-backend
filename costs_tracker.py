@@ -7,7 +7,9 @@
 import os
 import logging
 import httpx
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
+
+TZ_BA = timezone(timedelta(hours=-3))
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +54,7 @@ async def log_cost(model: str, endpoint: str, tokens_input: int, tokens_output: 
         return cost
     try:
         payload = {
-            "timestamp":     datetime.now().isoformat(),
+            "timestamp":     datetime.now(TZ_BA).isoformat(),
             "model":         model,
             "endpoint":      endpoint,
             "tokens_input":  tokens_input,
