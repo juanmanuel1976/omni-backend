@@ -484,6 +484,34 @@
         window.API_BASE_URL = 'https://omni-backend-dev.onrender.com';
         window.PLAN = localStorage.getItem('crisalia_plan') || 'free'; // 'free' | 'pro'
         window.CREATIVE_MODE = false;
+        // Muestra el score del GPT juez debajo de la síntesis final
+        function showGptScore(gptEval) {
+            if (!gptEval || gptEval.score == null) return;
+            const score = gptEval.score;
+            const obs = gptEval.observation || '';
+            const missed = gptEval.missed && gptEval.missed !== 'Ninguno' && gptEval.missed !== 'None' ? gptEval.missed : null;
+            const color = score >= 8 ? 'text-green-400 border-green-700/50 bg-green-900/20'
+                        : score >= 6 ? 'text-yellow-400 border-yellow-700/50 bg-yellow-900/20'
+                        : 'text-red-400 border-red-700/50 bg-red-900/20';
+            const badge = `
+                <div class="mt-6 border ${color} rounded-lg p-4 text-sm">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="font-bold text-base">${score}/10</span>
+                        <span class="opacity-70">— Evaluación independiente del debate</span>
+                    </div>
+                    ${obs ? `<p class="opacity-90">${obs}</p>` : ''}
+                    ${missed ? `<p class="opacity-70 mt-1"><span class="font-semibold">Faltó considerar:</span> ${missed}</p>` : ''}
+                </div>`;
+            // Intentar insertar en el tab de síntesis, si no al final del contenedor
+            const synthesisTab = document.querySelector('#tab-sintesis .prose');
+            if (synthesisTab) {
+                synthesisTab.insertAdjacentHTML('afterend', badge);
+            } else {
+                const container = document.getElementById('final-result-container');
+                if (container) container.insertAdjacentHTML('beforeend', badge);
+            }
+        }
+
         window.toggleImproveMode = function() {
             const panel = document.getElementById('improve-mode-panel');
             const arrow = document.getElementById('improve-mode-arrow');
@@ -873,10 +901,12 @@ if (hasPDF) {
             const result = await response.json();
             
             state.synthesis = result.synthesis;
+            state.gptEval = result.gpt_evaluation || null;
             state.history.push({ prompt: state.prompt, synthesis: result.synthesis });
-            
+
             await displayFinalResults(result.synthesis, result.revised, state.history, true);
-            
+            showGptScore(state.gptEval);
+
             updateTimeline(4);
             if (window.dialecticEnhancements && window.dialecticEnhancements.calculateAndDisplayConsensusEnhanced) {
                 window.dialecticEnhancements.calculateAndDisplayConsensusEnhanced();
@@ -1021,6 +1051,7 @@ if (hasPDF) {
                     }
                 });
                 state.synthesis = result.synthesis;
+                state.gptEval = result.gpt_evaluation || null;
                 state.history.push({ prompt: state.prompt, synthesis: result.synthesis });
                 dom.finalResultContainer.classList.remove('hidden');
                 const highlightedHTML = await highlightSynthesisSources(state.synthesis);
@@ -1030,6 +1061,7 @@ if (hasPDF) {
                 dom.finalResultContainer.innerHTML = templates.finalResultCard(debateTitle, highlightedHTML);
                 dom.finalResultContainer.scrollIntoView({behavior: 'smooth', block: 'start' });
                 attachFinalCardListeners();
+                showGptScore(state.gptEval);
                 updateTimeline(4);
                 
                 // Usar análisis mejorado si está disponible
@@ -1288,6 +1320,14 @@ if (selectedMode === 'debate') {
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = state.synthesis;
                 content += tempDiv.innerText;
+            }
+            if (state.gptEval && state.gptEval.score != null) {
+                content += `\n\n--- Evaluación independiente del debate ---\n`;
+                content += `Score: ${state.gptEval.score}/10\n`;
+                if (state.gptEval.observation) content += `${state.gptEval.observation}\n`;
+                if (state.gptEval.missed && state.gptEval.missed !== 'Ninguno' && state.gptEval.missed !== 'None') {
+                    content += `Faltó considerar: ${state.gptEval.missed}\n`;
+                }
             }
             return content;
         }
