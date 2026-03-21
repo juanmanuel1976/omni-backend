@@ -170,6 +170,7 @@ async def log_debate_supabase(
     is_document: bool,
     improve_mode: bool,
     creative_mode: bool,
+    gpt_audit: str = "",
 ):
     """Guarda el debate completo en debates_log."""
     if not SUPABASE_URL or not SUPABASE_KEY:
@@ -188,6 +189,7 @@ async def log_debate_supabase(
             "revised_deepseek": (revised_responses.get("deepseek") or "")[:3000],
             "revised_claude":   (revised_responses.get("claude") or "")[:3000],
             "synthesis":        (synthesis or "")[:3000],
+            "gpt_audit":        (gpt_audit or "")[:1000],
             "gpt_score":        gpt.get("score"),
             "gpt_observation":  (gpt.get("observation") or "")[:1000],
             "gpt_missed":       (gpt.get("missed") or "")[:500],
@@ -514,6 +516,75 @@ Respond in exact JSON format:
     except Exception as e:
         logger.error(f"[gpt_judge] Error: {e}")
         return {"score": None, "observation": f"Error: {e}"}
+
+
+async def call_gpt_auditor(original_query: str, anonymous_debate: str, lang: str = 'en') -> str:
+    """GPT audita el transcript del debate ANTES de la síntesis.
+    Devuelve un informe corto: argumentos sin contrastar, puntos faltantes, coherencia.
+    Este informe se inyecta como contexto extra en el prompt de síntesis de Gemini."""
+    if not OPENAI_API_KEY:
+        return ""
+    if lang == 'es':
+        prompt = f"""Eres un auditor experto de debates analíticos. Se te proporciona:
+1. La consulta original del usuario
+2. El transcript anónimo de un debate entre tres perspectivas expertas (sin identificar quién es quién)
+
+Tu tarea: identificar qué le falta al debate ANTES de que se escriba la síntesis final.
+
+**Consulta original:**
+{original_query}
+
+**Transcript del debate (anónimo):**
+{anonymous_debate}
+
+Respondé en formato JSON exacto:
+{{"uncontested": "<argumentos presentados que nadie cuestionó ni profundizó, separados por punto y coma>", "missing": "<temas importantes que el debate omitió por completo>", "coherence": <número del 1 al 10 que indica qué tan bien se complementaron las perspectivas>}}"""
+    else:
+        prompt = f"""You are an expert auditor of analytical debates. You are given:
+1. The user's original query
+2. An anonymous debate transcript between three expert perspectives (without identifying who is who)
+
+Your task: identify what the debate is missing BEFORE the final synthesis is written.
+
+**Original query:**
+{original_query}
+
+**Debate transcript (anonymous):**
+{anonymous_debate}
+
+Respond in exact JSON format:
+{{"uncontested": "<arguments presented that nobody challenged or expanded, separated by semicolons>", "missing": "<important topics the debate completely omitted>", "coherence": <number from 1 to 10 indicating how well the perspectives complemented each other>}}"""
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+                json={"model": "gpt-4o", "messages": [{"role": "user", "content": prompt}],
+                      "max_tokens": 400, "temperature": 0.3, "response_format": {"type": "json_object"}},
+            )
+            data = r.json()
+            content = data["choices"][0]["message"]["content"]
+            audit = json.loads(content)
+            # Convertir a texto para inyectar en el prompt de síntesis
+            if lang == 'es':
+                return (
+                    f"**INFORME DE AUDITORÍA DEL DEBATE (para guiar tu síntesis):**\n"
+                    f"- Argumentos no profundizados: {audit.get('uncontested', 'ninguno')}\n"
+                    f"- Temas omitidos: {audit.get('missing', 'ninguno')}\n"
+                    f"- Coherencia del debate: {audit.get('coherence', '?')}/10\n"
+                    f"Asegúrate de cubrir los temas omitidos y contrastar los argumentos no profundizados en tu síntesis."
+                )
+            else:
+                return (
+                    f"**DEBATE AUDIT REPORT (to guide your synthesis):**\n"
+                    f"- Uncontested arguments: {audit.get('uncontested', 'none')}\n"
+                    f"- Missing topics: {audit.get('missing', 'none')}\n"
+                    f"- Debate coherence: {audit.get('coherence', '?')}/10\n"
+                    f"Make sure to cover the missing topics and address the uncontested arguments in your synthesis."
+                )
+    except Exception as e:
+        logger.error(f"[gpt_auditor] Error: {e}")
+        return ""
 
 
 async def call_ai_model_no_stream(model_name: str, prompt: str, timeout: float = 360.0, endpoint: str = "unknown"):
@@ -862,6 +933,16 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     if request.creative_mode:
         synthesis_prompt += _CREATIVE_SYNTHESIS.get(request.lang, _CREATIVE_SYNTHESIS['en'])
 
+    # GPT audita el debate antes de la síntesis — inyecta informe de gaps para que Gemini los cubra
+    debate_points_for_audit = list(revised_responses.values())
+    anonymous_debate = "\n\n".join([
+        f"- Perspectiva {i+1}: {p[:600]}..." if len(p) > 600 else f"- Perspectiva {i+1}: {p}"
+        for i, p in enumerate(debate_points_for_audit)
+    ])
+    audit_report = await call_gpt_auditor(request.prompt, anonymous_debate, request.lang)
+    if audit_report:
+        synthesis_prompt += f"\n\n{audit_report}"
+
     final_synthesis = await call_ai_model_no_stream('gemini', synthesis_prompt, endpoint="/api/debate")
     background_tasks.add_task(log_user_query_supabase, "/api/debate", request.prompt, {"isDocument": request.isDocument, "ip_usuario": client_ip}, sintesis=final_synthesis)
 
@@ -886,6 +967,7 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
         is_document=bool(request.isDocument),
         improve_mode=bool(request.prior_llm_response and request.prior_llm_response.strip()),
         creative_mode=bool(request.creative_mode),
+        gpt_audit=audit_report,
     )
 
     return { "revised": revised_responses, "synthesis": final_synthesis, "initial": initial_responses, "dissidenceContext": request.dissidenceContext, "creative_mode": request.creative_mode, "gpt_evaluation": gpt_evaluation }

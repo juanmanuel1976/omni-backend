@@ -66,6 +66,9 @@ CREATE TABLE IF NOT EXISTS debates_log (
     -- Síntesis final
     synthesis           TEXT DEFAULT '',
 
+    -- Auditoría GPT pre-síntesis (gaps detectados antes de que Gemini sintetice)
+    gpt_audit           TEXT DEFAULT '',
+
     -- Evaluación GPT juez (referencia de calibración)
     gpt_score           SMALLINT DEFAULT NULL,
     gpt_observation     TEXT DEFAULT '',
