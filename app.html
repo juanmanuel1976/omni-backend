@@ -241,16 +241,18 @@
             </div>
 
             <!-- IMPROVE MODE: pegar respuesta de otro LLM -->
-            <div class="mt-5">
-                <button type="button" onclick="toggleImproveMode()" class="flex items-center gap-2 text-sm text-gray-500 hover:text-violet-400 transition-colors">
-                    <span id="improve-mode-arrow">▶</span>
-                    <span data-i18n="improve.toggle">Already have an AI response? Improve it with Crisalia</span>
-                </button>
-                <div id="improve-mode-panel" class="hidden mt-3">
-                    <div class="p-3 bg-violet-900/20 border border-violet-800/40 rounded-lg mb-2">
-                        <p class="text-xs text-violet-300" data-i18n="improve.hint">Paste the response you received from ChatGPT, Gemini, or any other AI. Crisalia will subject it to multi-model debate and return a substantially improved version.</p>
+            <div class="mt-5 border border-violet-800/30 rounded-xl p-4 bg-violet-950/20">
+                <button type="button" onclick="toggleImproveMode()" class="flex items-center gap-2 w-full text-left">
+                    <span class="text-lg">⚡</span>
+                    <div class="flex-1">
+                        <span class="text-sm font-semibold text-violet-300" data-i18n="improve.toggle">Already have an AI response? Improve it with Crisalia</span>
+                        <p class="text-xs text-gray-500 mt-0.5" data-i18n="improve.hint_short">Paste ChatGPT, Gemini or any AI response — Crisalia will debate and upgrade it</p>
                     </div>
-                    <textarea id="prior-llm-response" data-i18n="improve.placeholder" placeholder="Paste the existing AI response here..." class="w-full h-36 p-4 bg-gray-900 border border-violet-700/50 text-gray-300 rounded-lg resize-y focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm"></textarea>
+                    <span id="improve-mode-arrow" class="text-violet-400 text-sm">▼</span>
+                </button>
+                <div id="improve-mode-panel" class="mt-3">
+                    <textarea id="prior-llm-response" placeholder="Pegá aquí la respuesta de la otra IA..." class="w-full h-40 p-4 bg-gray-800 border-2 border-violet-600/70 text-gray-100 rounded-lg resize-y focus:ring-2 focus:ring-violet-400 focus:border-violet-400 text-sm placeholder-gray-500" maxlength="8000"></textarea>
+                    <p class="text-xs text-gray-600 mt-1 text-right"><span id="improve-char-count">0</span>/8000</p>
                 </div>
             </div>
 
@@ -484,6 +486,19 @@
         window.API_BASE_URL = 'https://omni-backend-dev.onrender.com';
         window.PLAN = localStorage.getItem('crisalia_plan') || 'free'; // 'free' | 'pro'
         window.CREATIVE_MODE = false;
+        // Badge "Modo Mejora activo" en el resultado cuando aplica
+        function showImproveBadge() {
+            const val = (document.getElementById('prior-llm-response')?.value || '').trim();
+            if (!val) return;
+            const container = document.getElementById('final-result-container');
+            if (!container) return;
+            const badge = `<div class="mb-4 flex items-center gap-2 px-4 py-2 bg-violet-900/40 border border-violet-600/50 rounded-lg text-sm text-violet-300 fade-in">
+                <span>⚡</span>
+                <span><strong>Modo Mejora activo</strong> — Esta síntesis mejoró una respuesta previa de otra IA mediante debate multi-modelo.</span>
+            </div>`;
+            container.insertAdjacentHTML('afterbegin', badge);
+        }
+
         // Muestra el score del GPT juez debajo de la síntesis final
         function showGptScore(gptEval) {
             if (!gptEval || gptEval.score == null) return;
@@ -517,8 +532,22 @@
             const arrow = document.getElementById('improve-mode-arrow');
             const hidden = panel.classList.contains('hidden');
             panel.classList.toggle('hidden', !hidden);
-            arrow.textContent = hidden ? '▼' : '▶';
+            arrow.textContent = hidden ? '▲' : '▼';
         };
+
+        // Contador de caracteres para prior-llm-response
+        document.addEventListener('DOMContentLoaded', () => {
+            const ta = document.getElementById('prior-llm-response');
+            const counter = document.getElementById('improve-char-count');
+            if (ta && counter) {
+                ta.addEventListener('input', () => {
+                    const len = ta.value.length;
+                    counter.textContent = len;
+                    // Truncar silenciosamente si supera el máximo
+                    if (len > 8000) ta.value = ta.value.slice(0, 8000);
+                });
+            }
+        });
         window.toggleCreativeMode = function() {
             window.CREATIVE_MODE = !window.CREATIVE_MODE;
             const btn = document.getElementById('creative-mode-toggle');
@@ -905,6 +934,7 @@ if (hasPDF) {
             state.history.push({ prompt: state.prompt, synthesis: result.synthesis });
 
             await displayFinalResults(result.synthesis, result.revised, state.history, true);
+            showImproveBadge();
             showGptScore(state.gptEval);
 
             updateTimeline(4);
@@ -1061,6 +1091,7 @@ if (hasPDF) {
                 dom.finalResultContainer.innerHTML = templates.finalResultCard(debateTitle, highlightedHTML);
                 dom.finalResultContainer.scrollIntoView({behavior: 'smooth', block: 'start' });
                 attachFinalCardListeners();
+                showImproveBadge();
                 showGptScore(state.gptEval);
                 updateTimeline(4);
                 
