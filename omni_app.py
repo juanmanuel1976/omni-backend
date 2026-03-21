@@ -518,19 +518,21 @@ Respond in exact JSON format:
         return {"score": None, "observation": f"Error: {e}"}
 
 
-async def call_gpt_auditor(original_query: str, anonymous_debate: str, lang: str = 'en') -> str:
+async def call_gpt_auditor(original_query: str, anonymous_debate: str, lang: str = 'en', current_date: str = "") -> str:
     """GPT audita el transcript del debate ANTES de la síntesis.
     Devuelve un informe corto: argumentos sin contrastar, puntos faltantes, coherencia.
     Este informe se inyecta como contexto extra en el prompt de síntesis de Gemini."""
     if not OPENAI_API_KEY:
         return ""
+    date_line_es = f"La fecha actual es {current_date}. Considera si algún argumento del debate puede estar desactualizado.\n" if current_date else ""
+    date_line_en = f"The current date is {current_date}. Consider whether any debate argument may be outdated.\n" if current_date else ""
     if lang == 'es':
         prompt = f"""Eres un auditor experto de debates analíticos. Se te proporciona:
 1. La consulta original del usuario
 2. El transcript anónimo de un debate entre tres perspectivas expertas (sin identificar quién es quién)
 
 Tu tarea: identificar qué le falta al debate ANTES de que se escriba la síntesis final.
-
+{date_line_es}
 **Consulta original:**
 {original_query}
 
@@ -545,7 +547,7 @@ Respondé en formato JSON exacto:
 2. An anonymous debate transcript between three expert perspectives (without identifying who is who)
 
 Your task: identify what the debate is missing BEFORE the final synthesis is written.
-
+{date_line_en}
 **Original query:**
 {original_query}
 
@@ -851,6 +853,23 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
 
     lbl = _LABELS.get(request.lang, _LABELS['en'])
 
+    # Contexto temporal — fecha actual inyectada para que los modelos sepan en qué momento responden
+    current_date = datetime.now(TZ_BA).strftime("%B %Y")  # ej: "March 2026"
+    if request.lang == 'es':
+        date_context = (
+            f"**CONTEXTO TEMPORAL:** La fecha actual es {datetime.now(TZ_BA).strftime('%B de %Y')}. "
+            f"Tu conocimiento tiene una fecha de corte en el pasado. Si la consulta involucra eventos, "
+            f"precios, tecnologías, políticas o datos que pueden haber cambiado, indícalo explícitamente "
+            f"y razona en base a tendencias conocidas. No presentes datos históricos como si fueran actuales.\n\n"
+        )
+    else:
+        date_context = (
+            f"**TEMPORAL CONTEXT:** The current date is {current_date}. "
+            f"Your knowledge has a cutoff date in the past. If the query involves events, prices, "
+            f"technologies, policies or data that may have changed, state it explicitly and reason "
+            f"based on known trends. Do not present historical data as if it were current.\n\n"
+        )
+
     # Instrucción de ambigüedad (siempre activa)
     ambiguity_suffix = f"\n\n{lbl['ambiguity_instruction']}"
 
@@ -862,9 +881,9 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
             else "Your task is to improve that response: identify its blind spots, biases or unsupported claims, and deliver a more robust version."
         )
         prior_block = f"\n\n---\n**{improve_label}:**\n{request.prior_llm_response.strip()}\n\n{improve_instruction}\n---"
-        initial_prompt = contextual_prompt + prior_block + ambiguity_suffix
+        initial_prompt = date_context + contextual_prompt + prior_block + ambiguity_suffix
     else:
-        initial_prompt = contextual_prompt + ambiguity_suffix
+        initial_prompt = date_context + contextual_prompt + ambiguity_suffix
 
     initial_prompt += _CREATIVE_INITIAL.get(request.lang, _CREATIVE_INITIAL['en']) if request.creative_mode else ""
 
@@ -939,7 +958,7 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
         f"- Perspectiva {i+1}: {p[:600]}..." if len(p) > 600 else f"- Perspectiva {i+1}: {p}"
         for i, p in enumerate(debate_points_for_audit)
     ])
-    audit_report = await call_gpt_auditor(request.prompt, anonymous_debate, request.lang)
+    audit_report = await call_gpt_auditor(request.prompt, anonymous_debate, request.lang, current_date)
     if audit_report:
         synthesis_prompt += f"\n\n{audit_report}"
 
