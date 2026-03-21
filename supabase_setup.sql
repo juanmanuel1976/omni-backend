@@ -81,3 +81,39 @@ CREATE INDEX IF NOT EXISTS idx_debates_log_timestamp ON debates_log (timestamp D
 CREATE INDEX IF NOT EXISTS idx_debates_log_lang      ON debates_log (lang);
 CREATE INDEX IF NOT EXISTS idx_debates_log_gpt_score ON debates_log (gpt_score);
 ALTER TABLE debates_log DISABLE ROW LEVEL SECURITY;
+
+-- ==============================================================
+-- Tabla: benchmark_log — comparación Crisalia original vs Crisalia+GPT
+-- Permite medir si la integración de GPT mejora o empeora los resultados.
+-- Cada fila = un par de debates sobre el mismo prompt (uno en cada versión).
+-- ==============================================================
+CREATE TABLE IF NOT EXISTS benchmark_log (
+    id                  BIGSERIAL PRIMARY KEY,
+    timestamp           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    prompt              TEXT NOT NULL,
+    lang                TEXT DEFAULT 'en',
+
+    -- Versión A: Crisalia original (master, sin GPT)
+    version_a           TEXT DEFAULT 'master',
+    synthesis_a         TEXT DEFAULT '',
+    duration_ms_a       INTEGER DEFAULT 0,
+    gpt_score_a         SMALLINT DEFAULT NULL,
+    gpt_observation_a   TEXT DEFAULT '',
+    cost_usd_a          NUMERIC(12,8) DEFAULT 0,
+
+    -- Versión B: Crisalia+GPT (dev)
+    version_b           TEXT DEFAULT 'dev',
+    synthesis_b         TEXT DEFAULT '',
+    duration_ms_b       INTEGER DEFAULT 0,
+    gpt_score_b         SMALLINT DEFAULT NULL,
+    gpt_observation_b   TEXT DEFAULT '',
+    cost_usd_b          NUMERIC(12,8) DEFAULT 0,
+
+    -- Resultado del benchmark
+    winner              TEXT DEFAULT NULL,  -- 'a', 'b', 'tie', o NULL si aún no evaluado
+    notes               TEXT DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_benchmark_log_timestamp ON benchmark_log (timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_benchmark_log_winner    ON benchmark_log (winner);
+ALTER TABLE benchmark_log DISABLE ROW LEVEL SECURITY;

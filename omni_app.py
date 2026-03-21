@@ -103,7 +103,6 @@ class DebateRequest(BaseModel):
     creative_mode: bool = False
     lang: str = 'en'
     prior_llm_response: Optional[str] = None
-    save_for_improvement: bool = False  # consentimiento del usuario para guardar el prompt
 
 class FeedbackRequest(BaseModel):
     rating: int          # 1-5
@@ -171,9 +170,8 @@ async def log_debate_supabase(
     is_document: bool,
     improve_mode: bool,
     creative_mode: bool,
-    save_prompt: bool,
 ):
-    """Guarda el debate completo en debates_log. El prompt solo se incluye si save_prompt=True."""
+    """Guarda el debate completo en debates_log."""
     if not SUPABASE_URL or not SUPABASE_KEY:
         return
     try:
@@ -182,7 +180,7 @@ async def log_debate_supabase(
             "timestamp":        datetime.now(TZ_BA).isoformat(),
             "lang":             lang,
             "duration_ms":      duration_ms,
-            "prompt":           prompt[:2000] if save_prompt else None,
+            "prompt":           (prompt or "")[:2000],
             "initial_gemini":   (initial_responses.get("gemini") or "")[:3000],
             "initial_deepseek": (initial_responses.get("deepseek") or "")[:3000],
             "initial_claude":   (initial_responses.get("claude") or "")[:3000],
@@ -193,9 +191,9 @@ async def log_debate_supabase(
             "gpt_score":        gpt.get("score"),
             "gpt_observation":  (gpt.get("observation") or "")[:1000],
             "gpt_missed":       (gpt.get("missed") or "")[:500],
-            "is_document":      is_document,
-            "improve_mode":     improve_mode,
-            "creative_mode":    creative_mode,
+            "is_document":      bool(is_document),
+            "improve_mode":     bool(improve_mode),
+            "creative_mode":    bool(creative_mode),
         }
         headers = {
             "apikey":        SUPABASE_KEY,
@@ -885,10 +883,9 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
         revised_responses=revised_responses,
         synthesis=final_synthesis,
         gpt_evaluation=gpt_evaluation,
-        is_document=request.isDocument,
+        is_document=bool(request.isDocument),
         improve_mode=bool(request.prior_llm_response and request.prior_llm_response.strip()),
-        creative_mode=request.creative_mode,
-        save_prompt=request.save_for_improvement,
+        creative_mode=bool(request.creative_mode),
     )
 
     return { "revised": revised_responses, "synthesis": final_synthesis, "initial": initial_responses, "dissidenceContext": request.dissidenceContext, "creative_mode": request.creative_mode, "gpt_evaluation": gpt_evaluation }
