@@ -585,7 +585,7 @@ async def analyze_semantic_consensus_with_claude(responses):
 
 Responde SOLO con el JSON válido, sin texto adicional."""
     try:
-        consensus_analysis = await call_ai_model_no_stream('claude', consensus_prompt)
+        consensus_analysis = await call_ai_model_no_stream('claude', consensus_prompt, endpoint="/api/consensus")
         json_start = consensus_analysis.find('{')
         json_end = consensus_analysis.rfind('}') + 1
         if json_start != -1 and json_end != -1:
@@ -611,7 +611,7 @@ Texto a analizar:
 Responde únicamente con un objeto JSON válido con la clave "claims", que contenga una lista de strings.
 Ejemplo de salida: {{"claims": ["Luis Caputo es el Ministro de Economía desde Diciembre 2023.", "Sergio Massa fue candidato a presidente."]}}
 """
-        raw_claims = await call_ai_model_no_stream('claude', extraction_prompt)
+        raw_claims = await call_ai_model_no_stream('claude', extraction_prompt, endpoint="/api/fact-check")
         claims_data = json.loads(raw_claims[raw_claims.find('{'):raw_claims.rfind('}')+1])
         claims = claims_data.get("claims", [])
         if not claims:
@@ -624,7 +624,7 @@ Evalúa la siguiente afirmación basada en tu conocimiento general y datos públ
 Afirmación: "{claim}"
 Contexto de la consulta original: "{original_query}"
 """
-            verification_tasks.append(call_ai_model_no_stream('gemini', verification_prompt))
+            verification_tasks.append(call_ai_model_no_stream('gemini', verification_prompt, endpoint="/api/fact-check"))
         results = await asyncio.gather(*verification_tasks)
         report_items = []
         for i, raw_result in enumerate(results):
@@ -1072,9 +1072,9 @@ TU TAREA:
 Respondé de forma concisa y técnica. Máximo 4 oraciones."""
 
     initial_tasks = [
-        call_ai_model_no_stream('gemini', prompt_validacion, timeout=MODEL_TIMEOUT_VALIDATION),
-        call_ai_model_no_stream('deepseek', prompt_validacion, timeout=MODEL_TIMEOUT_VALIDATION),
-        call_ai_model_no_stream('claude', prompt_validacion, timeout=MODEL_TIMEOUT_VALIDATION)
+        call_ai_model_no_stream('gemini', prompt_validacion, timeout=MODEL_TIMEOUT_VALIDATION, endpoint="/api/validate-change"),
+        call_ai_model_no_stream('deepseek', prompt_validacion, timeout=MODEL_TIMEOUT_VALIDATION, endpoint="/api/validate-change"),
+        call_ai_model_no_stream('claude', prompt_validacion, timeout=MODEL_TIMEOUT_VALIDATION, endpoint="/api/validate-change")
     ]
     results = await asyncio.gather(*initial_tasks)
     initial_responses = {
@@ -1100,7 +1100,7 @@ Respondé de forma concisa y técnica. Máximo 4 oraciones."""
 
 **Ahora:** ¿Coincidís con ellos? ¿Qué agregarías o corregirías? ¿Hay riesgos que no mencionaron?
 Sé específico. Si el cambio es seguro, decilo claramente. Si hay riesgo, nombrá el riesgo exacto."""
-        critique_tasks.append(call_ai_model_no_stream(model, critique_prompt, timeout=MODEL_TIMEOUT_VALIDATION))
+        critique_tasks.append(call_ai_model_no_stream(model, critique_prompt, timeout=MODEL_TIMEOUT_VALIDATION, endpoint="/api/validate-change"))
 
     critique_results = await asyncio.gather(*critique_tasks)
     revised_responses = dict(zip(models_order, critique_results))
@@ -1127,7 +1127,7 @@ Producí un veredicto final en formato JSON válido:
 
 Respondé SOLO con el JSON válido, sin texto adicional."""
 
-    raw_verdict = await call_ai_model_no_stream('gemini', synthesis_prompt, timeout=MODEL_TIMEOUT_VALIDATION)
+    raw_verdict = await call_ai_model_no_stream('gemini', synthesis_prompt, timeout=MODEL_TIMEOUT_VALIDATION, endpoint="/api/validate-change")
 
     try:
         json_start = raw_verdict.find('{')
