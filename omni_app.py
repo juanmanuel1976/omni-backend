@@ -100,6 +100,7 @@ class DebateRequest(BaseModel):
     creative_mode: bool = False
     lang: str = 'en'
     prior_llm_response: Optional[str] = None
+    save_for_improvement: bool = False  # consentimiento del usuario para guardar el prompt
 
 class FeedbackRequest(BaseModel):
     rating: int          # 1-5
@@ -155,6 +156,56 @@ async def log_user_query_supabase(endpoint: str, prompt: str, extra_info: dict =
                 logger.error(f"Supabase rechazó consultas_log ({r.status_code}): {r.text}")
     except Exception as e:
         logger.error(f"Fallo al guardar el log en Supabase: {e}")
+
+async def log_debate_supabase(
+    prompt: str,
+    lang: str,
+    duration_ms: int,
+    initial_responses: dict,
+    revised_responses: dict,
+    synthesis: str,
+    gpt_evaluation: dict,
+    is_document: bool,
+    improve_mode: bool,
+    creative_mode: bool,
+    save_prompt: bool,
+):
+    """Guarda el debate completo en debates_log. El prompt solo se incluye si save_prompt=True."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return
+    try:
+        gpt = gpt_evaluation or {}
+        payload = {
+            "timestamp":        datetime.now().isoformat(),
+            "lang":             lang,
+            "duration_ms":      duration_ms,
+            "prompt":           prompt[:2000] if save_prompt else None,
+            "initial_gemini":   (initial_responses.get("gemini") or "")[:3000],
+            "initial_deepseek": (initial_responses.get("deepseek") or "")[:3000],
+            "initial_claude":   (initial_responses.get("claude") or "")[:3000],
+            "revised_gemini":   (revised_responses.get("gemini") or "")[:3000],
+            "revised_deepseek": (revised_responses.get("deepseek") or "")[:3000],
+            "revised_claude":   (revised_responses.get("claude") or "")[:3000],
+            "synthesis":        (synthesis or "")[:3000],
+            "gpt_score":        gpt.get("score"),
+            "gpt_observation":  (gpt.get("observation") or "")[:1000],
+            "gpt_missed":       (gpt.get("missed") or "")[:500],
+            "is_document":      is_document,
+            "improve_mode":     improve_mode,
+            "creative_mode":    creative_mode,
+        }
+        headers = {
+            "apikey":        SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type":  "application/json",
+            "Prefer":        "return=minimal",
+        }
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(f"{SUPABASE_URL}/rest/v1/debates_log", headers=headers, json=payload)
+            if r.status_code not in (200, 201):
+                logger.error(f"Supabase rechazó debates_log ({r.status_code}): {r.text}")
+    except Exception as e:
+        logger.error(f"Fallo al guardar debates_log: {e}")
 
 # --- FUNCIONES AUXILIARES RAG ---
 async def get_text_from_files(files: List[UploadFile]) -> str:
@@ -716,8 +767,9 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     x_forwarded = raw_request.headers.get("X-Forwarded-For")
     client_ip = x_forwarded.split(",")[0].strip() if x_forwarded else (raw_request.client.host if raw_request.client else "127.0.0.1")
     
+    debate_start = time.time()
     contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'direct', request.isDocument)
-    
+
     if request.dissidenceContext:
         contextual_prompt = build_enhanced_dialectic_prompt(contextual_prompt, request.dissidenceContext)
 
@@ -819,6 +871,22 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
         for i, p in enumerate(debate_points)
     ])
     gpt_evaluation = await call_gpt_judge(request.prompt, anonymous_summary, final_synthesis, request.lang)
+
+    duration_ms = int((time.time() - debate_start) * 1000)
+    background_tasks.add_task(
+        log_debate_supabase,
+        prompt=request.prompt,
+        lang=request.lang,
+        duration_ms=duration_ms,
+        initial_responses=initial_responses,
+        revised_responses=revised_responses,
+        synthesis=final_synthesis,
+        gpt_evaluation=gpt_evaluation,
+        is_document=request.isDocument,
+        improve_mode=bool(request.prior_llm_response and request.prior_llm_response.strip()),
+        creative_mode=request.creative_mode,
+        save_prompt=request.save_for_improvement,
+    )
 
     return { "revised": revised_responses, "synthesis": final_synthesis, "initial": initial_responses, "dissidenceContext": request.dissidenceContext, "creative_mode": request.creative_mode, "gpt_evaluation": gpt_evaluation }
 
