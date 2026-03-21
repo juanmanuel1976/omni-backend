@@ -1,0 +1,1747 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crisalia | Inteligencia Sintetizada para Decisiones Críticas</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%230f3b5c%22></rect><text y=%22.9em%22 x=%22.25em%22 font-size=%2280%22 fill=%22%23ffffff%22>C</text></svg>">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="dialectic-styles.css">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0A0910;
+            color: #E5E7EB;
+        }
+        .hero-gradient {
+            background-image: radial-gradient(circle at 20% 30%, rgba(124, 58, 237, 0.15), transparent 40%),
+                              radial-gradient(circle at 80% 70%, rgba(79, 70, 229, 0.15), transparent 40%);
+        }
+        .card-glow {
+            position: relative;
+            background-color: #111827;
+            border-radius: 1rem;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .card-glow:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 0 30px rgba(124, 58, 237, 0.3);
+        }
+        .source-gemini { background-color: rgba(66, 133, 244, 0.15); border-left: 2px solid #4285F4; }
+        .source-deepseek { background-color: rgba(52, 168, 83, 0.15); border-left: 2px solid #34A853; }
+        .source-claude { background-color: rgba(212, 129, 5, 0.15); border-left: 2px solid #D48105; }
+        .prose { max-width: none; color: #D1D5DB; } 
+        .prose strong { color: #E5E7EB; }
+        .prose h1, .prose h2, .prose h3, .prose h4 { color: #F9FAFB; } 
+        .prose a { color: #818CF8; font-weight: 500; }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .mode-selector input:checked + label { background-color: #7C3AED; color: #ffffff; border-color: #7C3AED; font-weight: 500; }
+        .confidence-selector input:checked + label { background-color: #7C3AED; color: #ffffff; border-color: #7C3AED; font-weight: 500; }
+        #file-uploader { display: none; }
+        .cursor-blink::after { content: '|'; animation: blink 1.2s infinite steps(1); }
+        @keyframes blink { 50% { opacity: 0; } }
+        .timeline { display: flex; justify-content: space-between; align-items: flex-start; }
+        .timeline-step { text-align: center; position: relative; width: 25%; }
+        .timeline-step .step-circle { width: 32px; height: 32px; border-radius: 50%; background-color: #1F2937; border: 2px solid #4B5563; color: #9CA3AF; display: flex; align-items: center; justify-content: center; margin: 0 auto; font-weight: bold; transition: all 0.4s ease; }
+        .timeline-step .step-label { margin-top: 8px; font-size: 12px; color: #9CA3AF; font-weight: 500; transition: all 0.4s ease; }
+        .timeline-step.active .step-circle { background-color: #312E81; border-color: #818CF8; color: #818CF8; }
+        .timeline-step.active .step-label { color: #818CF8; }
+        .timeline-step.completed .step-circle { background-color: #065F46; border-color: #10B981; color: white; }
+        .timeline-step.completed .step-label { color: #10B981; }
+        .timeline-step .step-line { position: absolute; top: 15px; left: 50%; width: 100%; height: 2px; background-color: #374151; z-index: -1; transition: all 0.4s ease; }
+        .timeline-step:first-child .step-line { left: 50%; width: 50%; }
+        .timeline-step:last-child .step-line { display: none; }
+        .timeline-step.completed .step-line { background-color: #065F46; }
+        /* Plan free: locked overlay sobre las tarjetas de modelos */
+        .plan-locked-wrapper { position: relative; }
+        .plan-locked-blur { filter: blur(5px); pointer-events: none; opacity: 0.25; user-select: none; }
+        .plan-locked-badge { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+        .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+        .lang-switcher-btn {
+          background: none; border: none; cursor: pointer;
+          color: #6B7280; font-size: 12px; font-weight: 600; letter-spacing: 1px;
+          padding: 4px 6px; border-radius: 4px; transition: color 0.2s;
+        }
+        .lang-switcher-btn:hover { color: #fff; }
+        .lang-switcher-btn.active-lang { color: #fff; background: rgba(124,58,237,0.3); }
+    </style>
+    <script src="translations.js?v=2"></script>
+
+    <script>
+        if (typeof pdfjsLib !== 'undefined') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js`;
+        }
+    </script>
+</head>
+<body class="bg-[#0A0910] text-gray-300">
+    <div id="nda-overlay" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+    <div class="bg-[#111827] border border-gray-700 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div class="p-8">
+            <!-- Header con logo/título -->
+            <div class="text-center mb-6">
+                <h1 class="text-2xl font-bold text-white mb-2">CRISALIA</h1>
+                <div class="h-px bg-gradient-to-r from-transparent via-violet-500 to-transparent"></div>
+            </div>
+            
+            <!-- Título NDA -->
+            <h2 class="text-xl font-semibold text-white mb-6 text-center">
+                Non-Disclosure Agreement
+            </h2>
+            
+            <!-- Contenido NDA -->
+            <div class="text-gray-300 text-sm leading-relaxed space-y-4 mb-8">
+                <p class="font-medium text-white">
+                    CONFIDENTIAL TECHNOLOGY DEMONSTRATION
+                </p>
+                
+                <p>
+                    This demonstration contains proprietary and confidential information owned by <strong class="text-violet-400">Mediacon SRL</strong>. By proceeding, you acknowledge and agree to the following terms:
+                </p>
+                
+                <ul class="list-disc list-inside space-y-2 text-gray-400">
+                    <li>All information, processes, algorithms, and methodologies shown are proprietary to Mediacon SRL</li>
+                    <li>You will not disclose, reproduce, or distribute any part of this technology without written consent</li>
+                    <li>You will not use this information for competitive purposes or business development</li>
+                    <li>This demonstration is provided for evaluation purposes only</li>
+                    <li>All intellectual property rights remain with Mediacon SRL</li>
+                </ul>
+                
+                <p class="text-center text-gray-500 text-xs mt-6">
+                    This agreement is governed by Argentine law. Any unauthorized disclosure may result in legal action.
+                </p>
+            </div>
+            
+            <!-- Botones de acción -->
+            <div class="flex flex-col sm:flex-row gap-4">
+                <button id="nda-decline" class="flex-1 px-6 py-3 bg-gray-700 text-gray-300 font-medium rounded-lg hover:bg-gray-600 transition-colors">
+                    Decline & Exit
+                </button>
+                <button id="nda-accept" class="flex-1 px-6 py-3 bg-violet-600 text-white font-semibold rounded-lg hover:bg-violet-700 transition-colors">
+                    I Agree & Proceed
+                </button>
+            </div>
+            
+            <!-- Footer -->
+            <div class="text-center mt-6 pt-4 border-t border-gray-700">
+                <p class="text-xs text-gray-500">
+                    © 2025 Mediacon SRL. All rights reserved.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+    <header class="sticky top-0 z-50 bg-black/30 backdrop-blur-lg border-b border-gray-800">
+        <div class="container mx-auto max-w-7xl px-4">
+            <nav class="flex justify-between items-center py-4">
+                <a href="#" class="text-2xl font-bold tracking-tighter text-white">
+                    Crisalia<span class="text-violet-500">.</span>
+                </a>
+                <div class="flex items-center space-x-4">
+                    <a href="#features" class="text-sm font-medium text-gray-400 hover:text-white transition-colors" data-i18n="nav.features">Features</a>
+                    <div class="flex items-center gap-1 text-sm">
+                        <button class="lang-switcher-btn" data-lang="en" onclick="setLanguage('en')">EN</button>
+                        <span class="text-gray-600">|</span>
+                        <button class="lang-switcher-btn" data-lang="es" onclick="setLanguage('es')">ES</button>
+                    </div>
+                    <button id="theme-toggle" class="p-2 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                        </svg>
+                    </button>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container mx-auto max-w-5xl px-4 py-8">
+        <section class="text-center py-12 hero-gradient">
+            <h1 class="text-4xl md:text-5xl font-extrabold tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-white to-gray-400 mb-4" data-i18n="app.hero.title">Synthesized Intelligence for Critical Decisions</h1>
+            <p class="text-lg text-gray-400 max-w-3xl mx-auto" data-i18n="app.hero.subtitle">Crisalia doesn't give you an answer — it delivers a strategy. We orchestrate a panel of expert AIs to generate insights that are robust, transparent, and free from single-model bias.</p>
+        </section>
+
+        <section id="step1" class="card-glow p-8 mb-8">
+            <h2 id="step1-title" class="text-xl font-semibold mb-6 text-center text-white" data-i18n="step1.title">1. Provide Content for Analysis</h2>
+            <div class="mb-6">
+                <label for="file-uploader" class="w-full text-center cursor-pointer bg-gray-900 hover:bg-gray-800 border-2 border-dashed border-gray-700 rounded-lg p-6 block transition">
+                    <span class="text-gray-300 font-semibold" data-i18n="step1.file_label">Select documents for analysis (.txt, .md, .pdf)</span>
+                    <span class="text-gray-500 text-sm block mt-1" data-i18n="step1.file_drag">or drag and drop files here</span>
+                </label>
+                <input type="file" id="file-uploader" accept=".txt,.md,.text/plain,.pdf" multiple>
+                <div id="file-list-display" class="text-left text-sm text-gray-400 mt-4"></div>
+            </div>
+            <div class="relative my-6">
+                <div class="absolute inset-0 flex items-center">
+                    <div class="w-full border-t border-gray-700"></div>
+                </div>
+                <div class="relative flex justify-center">
+                    <span class="bg-[#111827] px-3 text-sm text-gray-500" data-i18n="step1.divider">OR</span>
+                </div>
+            </div>
+            <textarea id="prompt-input" data-i18n="step1.textarea_placeholder" placeholder="Paste text directly here..." class="w-full h-40 p-4 bg-gray-900 border border-gray-700 text-gray-300 rounded-lg resize-y focus:ring-2 focus:ring-violet-500 focus:border-transparent"></textarea>
+
+
+            <div class="mt-6">
+                <label class="text-sm font-medium text-gray-400 mb-3 block" data-i18n="step1.method_label">Analysis Methodology:</label>
+                <div class="mode-selector flex flex-col sm:flex-row bg-gray-900 rounded-lg p-1 border border-gray-700">
+                    <input type="radio" id="mode-direct" name="analysisMode" value="direct" class="sr-only" checked>
+                    <label for="mode-direct" class="flex-1 text-center cursor-pointer text-gray-400 text-sm py-2 px-4 rounded-md border border-transparent transition-colors" title="Generates a direct and concise response, ideal for quick data." data-i18n="step1.mode_direct">Concise Analysis</label>
+                    <input type="radio" id="mode-perspectives" name="analysisMode" value="perspectives" class="sr-only">
+                    <label for="mode-perspectives" class="flex-1 text-center cursor-pointer text-gray-400 text-sm py-2 px-4 rounded-md border border-transparent transition-colors" title="Develops multiple perspectives and explores nuances, ideal for deep research." data-i18n="step1.mode_perspectives">Comprehensive Analysis</label>
+                    <input type="radio" id="mode-debate" name="analysisMode" value="debate" class="sr-only">
+                    <label for="mode-debate" class="flex-1 text-center cursor-pointer text-gray-200 text-sm py-2 px-4 rounded-md border border-transparent transition-colors font-semibold" title="Subjects perspectives to cross-examination to forge a more robust and validated synthesis." data-i18n="step1.mode_debate">Dialectical Analysis</label>
+                </div>
+                <div id="mode-description" class="text-center text-xs text-gray-500 mt-3 min-h-[2.5em] px-2"></div>
+            </div>
+
+            <!-- Configuración dialéctica mejorada -->
+            <div id="dialectic-config" class="hidden mt-6 p-6 dialectic-config rounded-lg border border-violet-500/30">
+                <h3 class="text-lg font-semibold text-white mb-4 flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span data-i18n="dialectic.title">Dialectical Analysis Settings</span>
+                </h3>
+
+                <div class="mb-4">
+                    <label class="text-sm font-medium text-gray-300 mb-3 block" data-i18n="dialectic.confidence_label">Desired Confidence Level:</label>
+                    <div class="confidence-selector grid grid-cols-1 sm:grid-cols-3 gap-2 bg-gray-900 rounded-lg p-1 border border-gray-700">
+                        <input type="radio" id="confidence-exploratory" name="confidenceLevel" value="exploratory" class="sr-only" checked>
+                        <label for="confidence-exploratory" class="text-center cursor-pointer text-gray-400 text-sm py-2 px-3 rounded-md border border-transparent transition-colors" title="Accepts greater diversity of opinions (>60% consensus)">
+                            <div class="font-medium" data-i18n="dialectic.exploratory">Exploratory</div>
+                            <div class="text-xs text-gray-500" data-i18n="dialectic.exploratory_sub">&gt;60% consensus</div>
+                        </label>
+
+                        <input type="radio" id="confidence-balanced" name="confidenceLevel" value="balanced" class="sr-only">
+                        <label for="confidence-balanced" class="text-center cursor-pointer text-gray-400 text-sm py-2 px-3 rounded-md border border-transparent transition-colors" title="Balance between consensus and diversity (>70% consensus)">
+                            <div class="font-medium" data-i18n="dialectic.balanced">Balanced</div>
+                            <div class="text-xs text-gray-500" data-i18n="dialectic.balanced_sub">&gt;70% consensus</div>
+                        </label>
+
+                        <input type="radio" id="confidence-conservative" name="confidenceLevel" value="conservative" class="sr-only">
+                        <label for="confidence-conservative" class="text-center cursor-pointer text-gray-400 text-sm py-2 px-3 rounded-md border border-transparent transition-colors" title="Prioritizes high consensus and certainty (>80% consensus)">
+                            <div class="font-medium" data-i18n="dialectic.conservative">Conservative</div>
+                            <div class="text-xs text-gray-500" data-i18n="dialectic.conservative_sub">&gt;80% consensus</div>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="text-sm text-gray-400 bg-gray-900/50 p-3 rounded-md border border-gray-700" data-i18n="dialectic.note"><strong class="text-violet-300">Note:</strong> If the initial consensus does not reach your desired level, the system will automatically suggest refinement prompts to improve convergence between AI models.</div>
+            </div>
+
+            <!-- IMPROVE MODE: pegar respuesta de otro LLM -->
+            <div class="mt-5">
+                <button type="button" onclick="toggleImproveMode()" class="flex items-center gap-2 text-sm text-gray-500 hover:text-violet-400 transition-colors">
+                    <span id="improve-mode-arrow">▶</span>
+                    <span data-i18n="improve.toggle">Already have an AI response? Improve it with Crisalia</span>
+                </button>
+                <div id="improve-mode-panel" class="hidden mt-3">
+                    <div class="p-3 bg-violet-900/20 border border-violet-800/40 rounded-lg mb-2">
+                        <p class="text-xs text-violet-300" data-i18n="improve.hint">Paste the response you received from ChatGPT, Gemini, or any other AI. Crisalia will subject it to multi-model debate and return a substantially improved version.</p>
+                    </div>
+                    <textarea id="prior-llm-response" data-i18n="improve.placeholder" placeholder="Paste the existing AI response here..." class="w-full h-36 p-4 bg-gray-900 border border-violet-700/50 text-gray-300 rounded-lg resize-y focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm"></textarea>
+                </div>
+            </div>
+
+            <button id="generate-btn" class="mt-4 w-full px-6 py-3 bg-violet-600 text-white font-bold rounded-lg hover:bg-violet-700 disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors duration-300 text-base" data-i18n="step1.generate_btn">Start Analysis</button>
+        </section>
+
+        <section id="process-timeline-container" class="hidden card-glow p-6 mb-8 fade-in">
+            <h2 class="text-xl font-semibold mb-6 text-center text-white" data-i18n="timeline.title">Analysis Phases</h2>
+            <div id="process-timeline" class="timeline">
+                <div class="timeline-step" data-step="1"><div class="step-circle">1</div><div class="step-label" data-i18n="timeline.step1">Query</div><div class="step-line"></div></div>
+                <div class="timeline-step" data-step="2"><div class="step-circle">2</div><div class="step-label" data-i18n="timeline.step2">Individual Analysis</div><div class="step-line"></div></div>
+                <div class="timeline-step" data-step="3"><div class="step-circle">3</div><div class="step-label" data-i18n="timeline.step3">Debate / Synthesis</div><div class="step-line"></div></div>
+                <div class="timeline-step" data-step="4"><div class="step-circle">✓</div><div class="step-label" data-i18n="timeline.step4">Final Result</div></div>
+            </div>
+        </section>
+
+        <!-- Nueva sección para respuestas iniciales en modo dialéctico -->
+        <section id="initial-responses-container" class="hidden card-glow p-6 mb-8 fade-in initial-responses-section">
+            <h2 class="text-xl font-semibold mb-4 text-center text-white" data-i18n="initial.title">Individual Initial Responses</h2>
+            <p class="text-center text-sm text-gray-400 mb-6" data-i18n="initial.subtitle">Review individual perspectives before the dialectical process</p>
+            <div id="initial-responses-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+        </section>
+
+        <section id="consensus-container" class="hidden card-glow p-6 mb-8 fade-in">
+            <h2 class="text-xl font-semibold mb-4 text-center text-white" data-i18n="consensus.title">Consensus Level Between Models</h2>
+            <div class="w-full bg-gray-800 rounded-full h-4">
+                <div id="consensus-bar" class="bg-violet-600 h-4 rounded-full transition-all duration-1000 ease-out" style="width: 0%"></div>
+            </div>
+            <div id="consensus-score" class="text-center text-2xl font-bold text-violet-400 mt-3">0%</div>
+            <div id="consensus-status" class="text-center text-sm text-gray-400 mt-2"></div>
+        </section>
+        
+        <!-- Sección mejorada de disidencias -->
+        <section id="friction-container" class="hidden card-glow p-6 mb-8 border border-amber-500/30 fade-in" style="background: linear-gradient(to right, rgba(253, 230, 138, 0.05), rgba(124, 58, 237, 0.05))">
+            <h2 class="text-xl font-semibold mb-3 text-center text-amber-300" data-i18n="friction.title">Detected Dissidence Points</h2>
+            <p class="text-center text-sm text-amber-400 mb-4" data-i18n="friction.subtitle">The AI models have different perspectives on these aspects:</p>
+
+            <div id="dissidence-analysis" class="space-y-3 mb-6"></div>
+
+            <div class="border-t border-amber-500/30 pt-6">
+                <h3 class="text-lg font-semibold text-white mb-3" data-i18n="friction.suggested_title">Suggested Refinement Prompts</h3>
+                <p class="text-sm text-gray-400 mb-4" data-i18n="friction.suggested_subtitle">Select and edit a prompt to guide the refinement of the debate:</p>
+                <div id="suggested-prompts" class="space-y-3 mb-4"></div>
+
+                <div class="mt-4">
+                    <label class="text-sm font-medium text-gray-300 mb-2 block" data-i18n="friction.custom_label">Or write your own refinement prompt:</label>
+                    <textarea id="custom-refinement-prompt" data-i18n="friction.custom_placeholder" placeholder="E.g.: 'Focus on economic viability and reduce methodological differences...'" class="w-full h-20 p-3 bg-gray-900 border border-gray-700 text-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent text-sm"></textarea>
+                </div>
+
+                <button id="refine-debate-btn" class="mt-3 w-full px-6 py-3 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-700 transition-colors" data-i18n="friction.refine_btn">Refine Debate</button>
+            </div>
+        </section>
+
+        <section id="step2" class="hidden">
+            <div id="step2-header" class="text-center mb-8">
+                <h2 class="text-2xl font-semibold mb-2 text-white" data-i18n="step2.title">2. Review Perspectives</h2>
+                <p class="text-gray-400" data-i18n="step2.subtitle">Evaluate the generated perspectives. Your selection will guide the final synthesis.</p>
+            </div>
+            <div id="responses-grid" class="grid grid-cols-1 md:grid-cols-3 gap-6"></div>
+        </section>
+
+        <section id="step3" class="hidden text-center mt-8 space-y-4 md:space-y-0 md:space-x-4">
+            <button id="refine-summary-btn" class="px-8 py-4 bg-gray-800 text-gray-200 font-semibold rounded-lg hover:bg-gray-700 disabled:bg-gray-900 transition-colors" data-i18n="btn.key_points">Generate Key Points</button>
+            <button id="refine-report-btn" class="px-8 py-4 bg-violet-600 text-white font-semibold rounded-lg hover:bg-violet-700 disabled:bg-gray-900 transition-colors" data-i18n="btn.strategic_synthesis">Develop Strategic Synthesis</button>
+        </section>
+
+        <section id="final-result-container" class="hidden w-full mt-8">
+    <div class="max-w-6xl mx-auto">
+        <div class="bg-[#111827] rounded-xl border border-gray-800 shadow-2xl overflow-hidden">
+            <div class="px-8 py-6 border-b border-gray-800">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-2xl font-bold text-white" data-i18n="final.title">Final Strategic Synthesis</h2>
+                    </div>
+
+                <div class="flex space-x-8 mt-6 border-b border-gray-700">
+                    <button class="tab-button active pb-3 px-1 font-medium" data-tab="sintesis" data-i18n="tab.synthesis">Synthesis</button>
+                    <button class="tab-button pb-3 px-1 font-medium" data-tab="argumentos" data-i18n="tab.arguments">Final Arguments</button>
+                    <button class="tab-button pb-3 px-1 font-medium" data-tab="historial" data-i18n="tab.history">Analysis History</button>
+                </div>
+            </div>
+            
+            <div class="px-8 py-6">
+                <div id="tab-sintesis" class="tab-content fade-in">
+                    <div class="prose prose-lg max-w-none text-gray-300 leading-relaxed">
+                        </div>
+                </div>
+                
+                <div id="tab-argumentos" class="tab-content hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        </div>
+                </div>
+                
+                <div id="tab-historial" class="tab-content hidden">
+                    <div class="space-y-8">
+                        </div>
+                </div>
+            </div>
+            
+            <div class="px-8 py-6 border-t border-gray-800 bg-gray-900/50">
+                <div class="flex items-center justify-between">
+                    <div id="analysis-metadata" class="text-sm text-gray-500">
+                        </div>
+                    <div class="flex space-x-3">
+                        <button id="copy-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-medium rounded-lg hover:bg-gray-700 transition-colors duration-300 text-sm" data-i18n="btn.copy">Copy</button>
+                        <button id="download-txt-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-medium rounded-lg hover:bg-gray-700 transition-colors duration-300 text-sm" data-i18n="btn.export_txt">Export .txt</button>
+                        <button id="reuse-prompt-btn" class="px-6 py-2 bg-[#7C3AED] text-white font-semibold rounded-lg hover:bg-[#6D28D9] transition-colors duration-300 text-sm" data-i18n="btn.deepen">Deepen Analysis</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+        <section id="features" class="card-glow p-8 mt-16">
+            <div class="text-center mb-12">
+                <h2 class="text-sm font-bold uppercase tracking-widest text-violet-400 mb-2" data-i18n="features.label">PLATFORM</h2>
+                <p class="text-3xl md:text-4xl font-bold text-white" data-i18n="features.title">A Toolkit for Augmented Intelligence</p>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="p-6 bg-gray-900 rounded-xl border border-gray-800">
+                    <div class="flex items-center gap-4 mb-4">
+                        <svg class="w-8 h-8 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        <h3 class="text-xl font-bold text-white" data-i18n="features.smart_consensus_title">Intelligent Consensus Metric</h3>
+                    </div>
+                    <p class="text-gray-400" data-i18n="features.smart_consensus_desc">Adaptive system that automatically adjusts the process according to your desired confidence level. Low consensus triggers contextual refinement prompts.</p>
+                </div>
+
+                <div class="p-6 bg-gray-900 rounded-xl border border-gray-800">
+                    <div class="flex items-center gap-4 mb-4">
+                        <svg class="w-8 h-8 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        <h3 class="text-xl font-bold text-white" data-i18n="features.dissidence_title">Automatic Dissidence Analysis</h3>
+                    </div>
+                    <p class="text-gray-400" data-i18n="features.dissidence_desc">Automatically identifies points of conceptual divergence between models and generates specific prompts to resolve methodological differences.</p>
+                </div>
+
+                <div class="p-6 bg-gray-900 rounded-xl border border-gray-800 lg:col-span-2">
+                    <div class="flex items-center gap-4 mb-4">
+                        <svg class="w-8 h-8 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                        <h3 class="text-xl font-bold text-white" data-i18n="features.trace_title">Reasoning Traceability</h3>
+                    </div>
+                    <p class="text-gray-400 mb-6" data-i18n="features.trace_desc_app">Full auditability. The final synthesis uses color-coding to trace each idea back to its source model, eliminating the "black box" of analysis.</p>
+                    <div class="p-4 bg-black/40 rounded-lg border border-gray-700 font-mono text-sm">
+                        <p class="text-gray-300 leading-relaxed">
+                            <span class="px-2 py-1 rounded source-gemini">El análisis de mercado sugiere una oportunidad de entrada en el sector de energía renovable.</span>
+                            <span class="px-2 py-1 rounded source-deepseek">Sin embargo, la barrera regulatoria en Europa podría retrasar la rentabilidad.</span>
+                            <span class="px-2 py-1 rounded source-claude">La síntesis recomienda una estrategia de adquisición focalizada en startups tecnológicas.</span>
+                        </p>
+                         <div class="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs">
+                            <span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#4285F4]"></span><span data-i18n="features.source_gemini">Source: Gemini</span></span>
+                            <span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#34A853]"></span><span data-i18n="features.source_deepseek">Source: Deepseek</span></span>
+                            <span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#D48105]"></span><span data-i18n="features.source_claude">Source: Claude</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    
+    <footer class="border-t border-gray-800 mt-16">
+    <div class="container mx-auto max-w-5xl px-4 py-8">
+        <div class="flex flex-col md:flex-row justify-between items-center">
+            <p class="text-sm text-gray-500" data-i18n="footer.rights_app">© 2025 Crisalia - Mediacon SRL. All rights reserved.</p>
+            <div class="flex space-x-6 mt-4 md:mt-0">
+                <a href="#" class="text-gray-500 hover:text-white transition-colors">Twitter</a>
+                <a href="#" class="text-gray-500 hover:text-white transition-colors">LinkedIn</a>
+                <button id="acknowledgments-btn" class="text-gray-500 hover:text-white transition-colors cursor-pointer" data-i18n="footer.acknowledgments">Acknowledgments</button>
+                <a href="#" class="text-gray-500 hover:text-white transition-colors" data-i18n="footer.contact">Contact</a>
+            </div>
+        </div>
+    </div>
+</footer>
+
+<!-- Modal de Agradecimientos -->
+<div id="acknowledgments-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-[#111827] border border-gray-700 rounded-xl shadow-2xl max-w-lg w-full">
+        <div class="p-6">
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-semibold text-white" data-i18n="ack.title">Acknowledgments</h3>
+                <button id="close-acknowledgments" class="text-gray-400 hover:text-white transition-colors">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- Contenido -->
+            <div class="space-y-4 text-gray-300 text-sm">
+                <p class="text-white font-medium mb-4" data-i18n="ack.intro">CRISALIA was made possible thanks to the collaboration and support of:</p>
+
+                <div class="space-y-3">
+                    <div>
+                        <h4 class="text-violet-400 font-medium mb-2" data-i18n="ack.team_label">Development Team</h4>
+                        <ul class="space-y-1 text-gray-400">
+                            <li>• Lucas Cáceres</li>
+                            <li>• Juan Martin Gené</li>
+                            <li>• Leandro Rodríguez</li>
+                            <li>• Juan Manuel Marzullo</li>
+                            <li>• Fernando Rodeles</li>
+                            <li>• Mariano Pedro Martin</li>
+                        </ul>
+                    </div>
+                    
+                    <div>
+                        <h4 class="text-violet-400 font-medium mb-2" data-i18n="ack.institutions_label">Institutions</h4>
+                        <ul class="space-y-1 text-gray-400">
+                            <li>• Biblioteca del Congreso de la Nación Argentina</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="pt-4 border-t border-gray-700">
+                    <p class="text-xs text-gray-500 text-center" data-i18n="ack.footer">Their contribution was fundamental to the development of this technology.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+    <script src="dialectic-enhancements.js"></script>
+    <script>
+        // =================== CÓDIGO CORREGIDO Y COMPLETO ===================
+
+        // Se cambian 'let' y 'const' por 'var' o 'window.' para asegurar 
+        // que las variables sean globales y visibles para todos los scripts.
+        var jsPDF = null;
+        if (window.jspdf && window.jspdf.jsPDF) {
+            jsPDF = window.jspdf.jsPDF;
+        }
+        window.API_BASE_URL = 'https://omni-backend-dev.onrender.com';
+        window.PLAN = localStorage.getItem('crisalia_plan') || 'free'; // 'free' | 'pro'
+        window.CREATIVE_MODE = false;
+        window.toggleImproveMode = function() {
+            const panel = document.getElementById('improve-mode-panel');
+            const arrow = document.getElementById('improve-mode-arrow');
+            const hidden = panel.classList.contains('hidden');
+            panel.classList.toggle('hidden', !hidden);
+            arrow.textContent = hidden ? '▼' : '▶';
+        };
+        window.toggleCreativeMode = function() {
+            window.CREATIVE_MODE = !window.CREATIVE_MODE;
+            const btn = document.getElementById('creative-mode-toggle');
+            const status = document.getElementById('creative-mode-status');
+            if (window.CREATIVE_MODE) {
+                btn.classList.replace('border-gray-600', 'border-violet-500');
+                btn.classList.replace('text-gray-400', 'text-violet-300');
+                status.textContent = 'ON';
+                status.className = 'text-xs px-1.5 py-0.5 bg-violet-900 text-violet-300 rounded';
+            } else {
+                btn.classList.replace('border-violet-500', 'border-gray-600');
+                btn.classList.replace('text-violet-300', 'text-gray-400');
+                status.textContent = 'OFF';
+                status.className = 'text-xs px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded';
+            }
+        };
+        window.state = {}; // << Corrección principal para el error.
+        var dom = {};
+        var analysisTimeout;
+
+        // La función initializeApp y su contenido se mantienen intactos,
+        // ya que su lógica es correcta.
+        function initializeApp() {
+            state = {
+                prompt: "", initial_responses: { gemini: { content: "" }, deepseek: { content: "" }, claude: { content: "" } },
+                decisions: { gemini: 'normal', deepseek: 'normal', claude: 'normal' }, synthesis: "",
+                isLoading: false, isStreaming: false, history: [], isRefining: false, documentText: "" 
+            };
+            dom = {
+                step1: document.getElementById('step1'), step2: document.getElementById('step2'), step3: document.getElementById('step3'),
+                finalResultContainer: document.getElementById('final-result-container'), promptInput: document.getElementById('prompt-input'),
+                generateBtn: document.getElementById('generate-btn'), refineSummaryBtn: document.getElementById('refine-summary-btn'),
+                refineReportBtn: document.getElementById('refine-report-btn'), responsesGrid: document.getElementById('responses-grid'),
+                modeDescription: document.getElementById('mode-description'), fileUploader: document.getElementById('file-uploader'),
+                fileNameDisplay: document.getElementById('file-name-display'),
+                consensusContainer: document.getElementById('consensus-container'),
+                consensusBar: document.getElementById('consensus-bar'),
+                consensusScore: document.getElementById('consensus-score'),
+                processTimelineContainer: document.getElementById('process-timeline-container'),
+                frictionContainer: document.getElementById('friction-container'),
+                frictionAnalysis: document.getElementById('friction-analysis'),
+                refinementPromptInput: document.getElementById('refinement-prompt-input'),
+                refineDebateBtn: document.getElementById('refine-debate-btn'),
+                step2Header: document.getElementById('step2-header'),
+                step1Title: document.getElementById('step1-title')
+            };
+        }
+
+        window.templates = {
+            responseCard: (model, initialContent = `<div class="animate-pulse space-y-2"><div class="h-4 bg-gray-700 rounded"></div><div class="h-4 bg-gray-700 rounded w-5/6"></div></div>`) => `
+                <div id="card-${model}" class="card-glow p-6 transition-all duration-300">
+                    <h3 class="text-lg font-bold text-white mb-3 capitalize flex items-center">
+                        <span class="w-3 h-3 rounded-full mr-2 ${model === 'gemini' ? 'bg-[#4285F4]' : model === 'deepseek' ? 'bg-[#34A853]' : 'bg-[#D48105]'}"></span>
+                        ${model}
+                    </h3>
+                    <div id="content-${model}" class="prose max-w-none text-sm min-h-[120px] text-gray-300">${initialContent}</div>
+                    <div id="actions-${model}" class="flex items-center justify-end space-x-2 mt-4 hidden">
+                        <button data-model="${model}" data-action="highlight" class="action-btn px-3 py-1 text-xs font-semibold rounded-full bg-green-900/30 text-green-300 hover:bg-green-800/50 border border-green-800/50">${t('action.include_synthesis')}</button>
+                        <button data-model="${model}" data-action="discard" class="action-btn px-3 py-1 text-xs font-semibold rounded-full bg-red-900/30 text-red-300 hover:bg-red-800/50 border border-red-800/50">${t('action.mark_counterpoint')}</button>
+                    </div>
+                </div>`,
+            finalResultCard: (title, content) => `
+                <div class="card-glow p-8 fade-in">
+                    <h2 class="text-2xl font-bold text-white mb-6 text-center">${title}</h2>
+                    <div class="prose max-w-none">${content}</div>
+                    <div class="mt-8 border-t border-gray-800 pt-6">
+                        <div class="text-center mb-6">
+                            <button id="reuse-prompt-btn" class="px-6 py-3 bg-violet-600 text-white font-semibold rounded-lg hover:bg-violet-700 transition-colors duration-300">${t('btn.deepen')}</button>
+                        </div>
+                        <div class="text-center flex flex-wrap justify-center gap-3">
+                            <button id="copy-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-semibold rounded-lg hover:bg-gray-700 transition-colors">${t('btn.copy')}</button>
+                            ${window.PLAN === 'free'
+                                ? `<button onclick="alert('Upgrade to Pro to download reports')" class="px-4 py-2 bg-gray-800/40 text-gray-600 font-semibold rounded-lg border border-gray-700/50 cursor-not-allowed" title="Pro only">🔒 ${t('btn.download_txt')}</button>
+                                   <button onclick="alert('Upgrade to Pro to download reports')" class="px-4 py-2 bg-gray-800/40 text-gray-600 font-semibold rounded-lg border border-gray-700/50 cursor-not-allowed" title="Pro only">🔒 ${t('btn.download_pdf')}</button>`
+                                : `<button id="download-txt-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-semibold rounded-lg hover:bg-gray-700 transition-colors">${t('btn.download_txt')}</button>
+                                   <button id="download-pdf-btn" class="px-4 py-2 bg-gray-800 text-gray-200 font-semibold rounded-lg hover:bg-gray-700 transition-colors">${t('btn.download_pdf')}</button>`
+                            }
+                        </div>
+                    </div>
+                </div>`,
+            errorCard: (error, isTimeout = false) => {
+                const title = isTimeout ? t('error.timeout_title') : t('error.connection_title');
+                const message = isTimeout
+                    ? t('error.timeout_body')
+                    : `${error.message}<br><p class="text-sm mt-2">Causa probable: El servidor puede estar inactivo o sobrecargado. Espera un minuto e intenta nuevamente.</p>`;
+                return `<div class="text-red-300 col-span-1 md:col-span-3 text-center bg-red-900/20 p-6 rounded-lg border border-red-800/50"><h3 class="font-bold text-lg">${title}</h3><p>${message}</p></div>`
+            }
+        };
+
+        const modeTexts = {
+            get direct() { return t('mode.direct'); },
+            get perspectives() { return t('mode.perspectives'); },
+            get debate() { return t('mode.debate'); }
+        };
+
+        window.lockedResponsesHTML = function() {
+            const fakeCard = (model, color) => `
+                <div class="card-glow p-6">
+                    <h3 class="text-lg font-bold text-white mb-3 capitalize flex items-center">
+                        <span class="w-3 h-3 rounded-full mr-2" style="background:${color}"></span>${model}
+                    </h3>
+                    <div class="space-y-2">
+                        <div class="h-3 bg-gray-700 rounded w-full"></div><div class="h-3 bg-gray-700 rounded w-5/6"></div>
+                        <div class="h-3 bg-gray-700 rounded w-4/5"></div><div class="h-3 bg-gray-700 rounded w-full"></div>
+                        <div class="h-3 bg-gray-700 rounded w-3/4"></div><div class="h-3 bg-gray-700 rounded w-5/6"></div>
+                        <div class="h-3 bg-gray-700 rounded w-full"></div><div class="h-3 bg-gray-700 rounded w-2/3"></div>
+                    </div>
+                </div>`;
+            return `<div class="plan-locked-wrapper col-span-1 md:col-span-3">
+                <div class="plan-locked-blur grid grid-cols-1 md:grid-cols-3 gap-4">
+                    ${fakeCard('gemini','#4285F4')}${fakeCard('deepseek','#34A853')}${fakeCard('claude','#D48105')}
+                </div>
+                <div class="plan-locked-badge">
+                    <div class="bg-gray-900/95 border border-violet-700/50 rounded-xl p-6 text-center max-w-xs mx-4 shadow-2xl">
+                        <div class="text-3xl mb-2">🔒</div>
+                        <h3 class="text-white font-bold mb-1">Individual Reasoning — Pro Only</h3>
+                        <p class="text-gray-400 text-sm mb-4">Upgrade to see how each model reasoned your question, compare perspectives, and conduct the full multi-round debate.</p>
+                        <button onclick="alert('Upgrade coming soon — contact us!')" class="px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white font-semibold rounded-lg text-sm transition-colors">Upgrade to Pro →</button>
+                    </div>
+                </div>
+            </div>`;
+        };
+
+        const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'for', 'with', 'on', 'at', 'from', 'by', 'in', 'of', 'to', 'is', 'are', 'was', 'were', 'it', 'this', 'that', 'they', 'he', 'she', 'we', 'i', 'you']);
+        
+        function getKeywords(text) { 
+            if (!text) return new Set(); 
+            return new Set( text.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(word => word.length > 2 && !stopWords.has(word)) ); 
+        }
+
+        async function highlightSynthesisSources(synthesisText) {
+            const synthesisSentences = synthesisText.split(/(?<=[.?!])\s+/);
+            const sourceResponses = state.initial_responses;
+            const highlightedSentences = synthesisSentences.map(sentence => {
+                const sentenceKeywords = getKeywords(sentence);
+                if (sentenceKeywords.size === 0) return `<span>${sentence}</span>`;
+                let scores = { gemini: 0, deepseek: 0, claude: 0 };
+                Object.keys(scores).forEach(model => {
+                    const sourceKeywords = getKeywords(sourceResponses[model].content);
+                    const overlap = new Set([...sentenceKeywords].filter(word => sourceKeywords.has(word)));
+                    scores[model] = sourceKeywords.size > 0 ? (overlap.size / sourceKeywords.size) : 0;
+                });
+                const maxScore = Math.max(...Object.values(scores));
+                if (maxScore < 0.05) return `<span>${sentence}</span>`;
+                const bestModel = Object.keys(scores).reduce((a, b) => scores[a] > scores[b] ? a : b);
+                return `<span class="px-1 py-0.5 rounded source-${bestModel}">${sentence}</span>`;
+            });
+            if (window.PLAN === 'free') {
+                const upgradeBanner = `<div class="mt-8 border border-violet-800/40 bg-violet-900/10 rounded-xl p-5 text-center">
+                    <p class="text-violet-300 font-semibold mb-1">🔒 Full Report Available on Pro</p>
+                    <p class="text-gray-400 text-sm mb-3">Upgrade to see color-coded reasoning by model, conduct multi-round debates, and download the full report.</p>
+                    <button onclick="alert('Upgrade coming soon — contact us!')" class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-lg transition-colors">Upgrade to Pro →</button>
+                </div>`;
+                return highlightedSentences.join(' ') + upgradeBanner;
+            }
+            let legend = `<div class="mt-8 border-t border-gray-800 pt-4 text-sm text-gray-500"><strong>${t('label.reasoning_trace')}</strong><div class="flex flex-wrap gap-x-4 gap-y-2 mt-3"><span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#4285F4]"></span>Gemini</span><span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#34A853]"></span>DeepSeek</span><span class="flex items-center"><span class="w-3 h-3 rounded-full inline-block mr-2 bg-[#D48105]"></span>Claude</span></div></div>`;
+            return highlightedSentences.join(' ') + legend;
+        }
+
+        // Bloque a PEGAR
+// VERSIÓN ACTUALIZADA PARA MANEJO DE MÚLTIPLES ARCHIVOS
+async function handleFileSelect(event) {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    state.fileFormData = new FormData();
+    const fileListDisplay = document.getElementById('file-list-display');
+    fileListDisplay.innerHTML = `<h4 class="font-semibold text-gray-300 mb-2">${t('label.files_for_analysis')}</h4>`;
+
+    let fileListHTML = '<ul class="list-disc list-inside">';
+    for (const file of files) {
+        state.fileFormData.append('files', file);
+        fileListHTML += `<li class="text-xs text-gray-500">- ${file.name} (${(file.size / 1024).toFixed(1)} KB)</li>`;
+    }
+    fileListHTML += '</ul>';
+    fileListDisplay.innerHTML += fileListHTML;
+
+    // Limpiamos el texto de documento único para evitar conflictos
+    state.documentText = ""; 
+    if(dom.promptInput) dom.promptInput.value = "";
+
+    // Sugerir modo dialéctico para RAG, que es el más potente
+    const debateRadio = document.getElementById('mode-debate');
+    if (debateRadio) debateRadio.click();
+}
+        
+        function setLoading(loading, message = null) {
+            if (!message) message = t('loading.analyzing');
+            state.isLoading = loading;
+            if(dom.generateBtn) dom.generateBtn.disabled = loading;
+            if(dom.refineSummaryBtn) dom.refineSummaryBtn.disabled = loading;
+            if(dom.refineReportBtn) dom.refineReportBtn.disabled = loading;
+            if(dom.promptInput) dom.promptInput.disabled = loading;
+            if (loading && dom.generateBtn) {
+                dom.generateBtn.innerHTML = `<span class="animate-pulse">${message}</span>`;
+            } else if(dom.generateBtn) {
+                dom.generateBtn.innerHTML = t('step1.generate_btn');
+            }
+        }
+
+        function handleTimeoutError() {
+            if (!state.isLoading) return;
+            console.error("El análisis excedió el tiempo límite.");
+            clearTimeout(analysisTimeout);
+            setLoading(false);
+            updateTimeline(0);
+            dom.step2.classList.remove('hidden');
+            dom.responsesGrid.innerHTML = templates.errorCard({}, true);
+        }
+        
+        function updateTimeline(stepNumber) {
+            const steps = document.querySelectorAll('#process-timeline .timeline-step');
+            steps.forEach((step, index) => {
+                step.classList.remove('active', 'completed');
+                if (index < stepNumber - 1) {
+                    step.classList.add('completed');
+                } else if (index === stepNumber - 1) {
+                    step.classList.add('active');
+                }
+            });
+        }
+
+        async function fetchAndDisplayFrictionAnalysis() {
+            dom.frictionAnalysis.innerHTML = `<div class="animate-pulse space-y-2"><div class="h-4 bg-gray-700 rounded"></div><div class="h-4 bg-gray-700 rounded w-5/6"></div></div>`;
+            try {
+                const simulatedAnalysis = `
+* **Desacuerdo sobre el Alcance:** Un modelo incluyó destinos no europeos (Marruecos), mientras que otros se centraron estrictamente en Europa.
+* **Desacuerdo sobre Logística:** Un modelo propuso un itinerario logísticamente desafiante (París-Roma-Barcelona), que fue criticado por otro por su ineficiencia.
+* **Desacuerdo sobre la Profundidad:** Algunos modelos propusieron visitar muchas ciudades superficialmente, mientras que otros abogaron por explorar menos ciudades con mayor profundidad.
+                `;
+                setTimeout(() => {
+                    dom.frictionAnalysis.innerHTML = marked.parse(simulatedAnalysis);
+                }, 1500);
+            } catch (error) {
+                dom.frictionAnalysis.innerHTML = "No se pudieron analizar los desacuerdos automáticamente. Por favor, revisa las perspectivas y proporciona orientación manual para el refinamiento.";
+            }
+        }
+
+        function handleLowConsensus() {
+            dom.frictionContainer.classList.remove('hidden');
+            fetchAndDisplayFrictionAnalysis();
+        }
+        
+        async function handleRefineDebate() {
+            const userInstruction = document.getElementById('custom-refinement-prompt').value.trim();
+            if (!userInstruction) {
+                alert(t('alert.no_instruction'));
+                return;
+            }
+            state.history.push({ prompt: "Orientación del usuario para resolver desacuerdos: " + userInstruction, synthesis: "" });
+            dom.frictionContainer.classList.add('hidden');
+            document.getElementById('custom-refinement-prompt').value = '';
+            handleRefine('report', t('refine.report_refined_title'));
+        }
+
+         async function handleGenerateClick() {
+        if (!state.isRefining) { state.history = []; }
+        
+        const hasFiles = state.fileFormData && state.fileFormData.has('files');
+        let promptText = "";
+        
+        if (hasFiles) {
+            promptText = dom.promptInput.value.trim();
+            if (!promptText) {
+                alert(t('alert.no_question'));
+                return;
+            }
+        } else {
+            promptText = state.documentText || dom.promptInput.value.trim();
+            if (!promptText) {
+                alert(t('alert.no_content'));
+                return;
+            }
+        }
+        
+        state.prompt = promptText;
+        const selectedMode = document.querySelector('input[name="analysisMode"]:checked').value;
+        
+        setLoading(true, t('loading.starting'));
+        dom.processTimelineContainer.classList.remove('hidden');
+        updateTimeline(1);
+
+        clearTimeout(analysisTimeout);
+        analysisTimeout = setTimeout(handleTimeoutError, 600000);
+        
+        dom.consensusContainer.classList.add('hidden'); 
+        dom.frictionContainer.classList.add('hidden');
+        
+        // LÓGICA DE DECISIÓN ACTUALIZADA
+        if (hasFiles) {
+            console.log("Archivos detectados. Iniciando análisis RAG.");
+            setLoading(true, t('loading.docs'));
+            handleRAGDebate(promptText); // Llamamos a la nueva función para RAG
+        } else if (selectedMode === 'debate') {
+            console.log("Modo debate sin archivos.");
+            setLoading(true, t('loading.debate'));
+            if (window.dialecticEnhancements) {
+                window.dialecticEnhancements.handleDebateWithContext(null, !!state.documentText);
+            } else {
+                handleDebate(!!state.documentText);
+            }
+        } else {
+            console.log("Análisis de texto simple.");
+            setLoading(true, t('loading.perspectives'));
+            streamFetch(selectedMode, !!state.documentText);
+        }
+    }
+    // NUEVA FUNCIÓN PARA MANEJAR EL LLAMADO A LA API RAG
+    async function handleRAGDebate(prompt) {
+        updateTimeline(2);
+        state.isStreaming = false;
+        dom.step2.classList.remove('hidden'); 
+        dom.step3.classList.add('hidden'); 
+        dom.finalResultContainer.classList.add('hidden');
+        const loadingSpinner = `<div class="animate-pulse space-y-2"><div class="h-4 bg-gray-700 rounded"></div><div class="h-4 bg-gray-700 rounded w-5/6"></div></div>`;
+        dom.responsesGrid.innerHTML = Object.keys(state.initial_responses).map(model => templates.responseCard(model, loadingSpinner)).join('');
+        
+        let estimatedTime = "2-3 minutos";
+const files = state.fileFormData.getAll('files');
+const hasPDF = files.some(f => f.type === 'application/pdf');
+
+if (hasPDF) {
+    const totalSize = files.reduce((sum, f) => sum + f.size, 0) / (1024 * 1024); // MB
+    if (totalSize > 10) {
+        estimatedTime = "5-8 minutos";
+        // Advertencia para documentos grandes
+        if (dom.step2Header) {
+            dom.step2Header.innerHTML = `
+                <div class="bg-amber-900/20 border border-amber-500/50 rounded-lg p-4 mb-4">
+                    <div class="flex items-start">
+                        <svg class="w-6 h-6 text-amber-400 mr-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <div>
+                            <h3 class="text-amber-300 font-semibold mb-1">Documento Grande Detectado</h3>
+                            <p class="text-sm text-amber-200">Si el PDF está escaneado, el sistema usará OCR (reconocimiento de texto). Esto puede tomar <strong>${estimatedTime}</strong>.</p>
+                            <p class="text-xs text-amber-300 mt-2">⏱️ Por favor, no cierres esta ventana. El análisis está en progreso...</p>
+                        </div>
+                    </div>
+                </div>
+                <h2 class="text-2xl font-semibold mb-2 text-white">Análisis RAG en Progreso...</h2>
+                <p class="text-gray-400">Recuperando información relevante de los documentos para fundamentar el debate.</p>
+            `;
+        }
+    } else {
+        estimatedTime = "2-4 minutos";
+        if (dom.step2Header) {
+            dom.step2Header.innerHTML = `
+                <h2 class="text-2xl font-semibold mb-2 text-white">Análisis RAG en Progreso...</h2>
+                <p class="text-gray-400">Procesando documentos... Tiempo estimado: <strong class="text-violet-400">${estimatedTime}</strong></p>
+            `;
+        }
+    }
+} else {
+    if (dom.step2Header) {
+        dom.step2Header.innerHTML = `
+            <h2 class="text-2xl font-semibold mb-2 text-white">Análisis RAG en Progreso...</h2>
+            <p class="text-gray-400">Recuperando información relevante de los documentos.</p>
+        `;
+    }
+}
+        
+        try {
+            // Añadimos el prompt y el historial al FormData
+            state.fileFormData.append('prompt', prompt);
+            state.fileFormData.append('history_json', JSON.stringify(state.history));
+
+            const response = await fetchWithRetries(`${API_BASE_URL}/api/rag-analysis`, {
+                method: 'POST',
+                body: state.fileFormData, // No se necesita 'Content-Type', el navegador lo pone solo con FormData
+            });
+            updateTimeline(3);
+            clearTimeout(analysisTimeout);
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || `Error del servidor: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            
+            state.synthesis = result.synthesis;
+            state.history.push({ prompt: state.prompt, synthesis: result.synthesis });
+            
+            await displayFinalResults(result.synthesis, result.revised, state.history, true);
+            
+            updateTimeline(4);
+            if (window.dialecticEnhancements && window.dialecticEnhancements.calculateAndDisplayConsensusEnhanced) {
+                window.dialecticEnhancements.calculateAndDisplayConsensusEnhanced();
+            } else {
+                calculateAndDisplayConsensus();
+            }
+
+        } catch (error) {
+            clearTimeout(analysisTimeout);
+            dom.responsesGrid.innerHTML = templates.errorCard(error);
+        } finally {
+            setLoading(false);
+            // Limpiar FormData para el próximo uso
+            state.fileFormData = new FormData();
+        }
+    }
+        
+        async function fetchWithRetries(url, options, retries = 3, delay = 10000, timeout = 600000) { // CAMBIADO A 6 MINUTOS
+            for (let i = 0; i < retries; i++) {
+                try {
+                    if (i > 0) { setLoading(true, `${t('loading.retry')} ${i}/${retries - 1}...`); }
+                    const controller = new AbortController();
+                    const id = setTimeout(() => controller.abort(), timeout);
+                    const response = await fetch(url, { ...options, signal: controller.signal });
+                    clearTimeout(id);
+                    if (!response.ok) { throw new Error(`${t('error.server_prefix')} ${response.status}`); }
+                    return response;
+                } catch (error) {
+                    if (i < retries - 1) { await new Promise(res => setTimeout(res, delay)); }
+                    else { throw error; }
+                }
+            }
+            throw new Error(t('error.no_connection'));
+        }
+
+        async function streamFetch(mode = 'direct') {
+            updateTimeline(2);
+            state.isStreaming = true;
+            dom.step2.classList.remove('hidden'); 
+            dom.step3.classList.add('hidden'); 
+            dom.finalResultContainer.classList.add('hidden');
+            dom.responsesGrid.innerHTML = Object.keys(state.initial_responses).map(model => {
+                state.initial_responses[model].content = '';
+                return templates.responseCard(model);
+            }).join('');
+
+            try {
+                const response = await fetchWithRetries(`${API_BASE_URL}/api/generate`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: state.prompt, history: state.history, mode: mode }),
+                });
+                updateTimeline(3);
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = "";
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n\n');
+                    buffer = lines.pop();
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const dataStr = line.substring(6);
+                            if (!dataStr) continue;
+                            try {
+                                const data = JSON.parse(dataStr);
+                                if (data.model === 'system' && data.chunk === 'DONE') {
+                                    clearTimeout(analysisTimeout);
+                                    state.isStreaming = false; 
+                                    state.isRefining = false;
+                                    Object.keys(state.initial_responses).forEach(model => {
+                                        const contentDiv = document.getElementById(`content-${model}`);
+                                        if(contentDiv) contentDiv.innerHTML = marked.parse(state.initial_responses[model].content);
+                                        const actionsDiv = document.getElementById(`actions-${model}`);
+                                        if(actionsDiv) actionsDiv.classList.remove('hidden');
+                                    });
+                                    if (window.PLAN === 'free') {
+                                        dom.responsesGrid.innerHTML = window.lockedResponsesHTML();
+                                        dom.consensusContainer.classList.add('hidden');
+                                        dom.step3.classList.add('hidden');
+                                    } else {
+                                        dom.step3.classList.remove('hidden');
+                                        if (window.dialecticEnhancements && window.dialecticEnhancements.calculateAndDisplayConsensusEnhanced) {
+                                            window.dialecticEnhancements.calculateAndDisplayConsensusEnhanced();
+                                        } else {
+                                            calculateAndDisplayConsensus();
+                                        }
+                                    }
+                                    setLoading(false);
+                                    updateTimeline(4);
+                                    continue;
+                                }
+                                const { model, chunk } = data;
+                                if (state.initial_responses[model]) {
+                                    state.initial_responses[model].content += chunk;
+                                    const contentDiv = document.getElementById(`content-${model}`);
+                                    if(contentDiv) contentDiv.innerHTML = marked.parse(state.initial_responses[model].content + '<span class="cursor-blink"></span>');
+                                }
+                            } catch (e) { 
+                                console.error('Error analizando JSON del stream:', dataStr); 
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                clearTimeout(analysisTimeout);
+                console.error("Error durante el streaming:", error);
+                dom.responsesGrid.innerHTML = templates.errorCard(error);
+                setLoading(false);
+            }
+        }
+
+        async function handleDebate() {
+            updateTimeline(2);
+            state.isStreaming = false;
+            dom.step2.classList.remove('hidden'); 
+            dom.step3.classList.add('hidden'); 
+            dom.finalResultContainer.classList.add('hidden');
+            const loadingSpinner = `<div class="animate-pulse space-y-2"><div class="h-4 bg-gray-700 rounded"></div><div class="h-4 bg-gray-700 rounded w-5/6"></div></div>`;
+            dom.responsesGrid.innerHTML = Object.keys(state.initial_responses).map(model => templates.responseCard(model, loadingSpinner)).join('');
+            
+            if (dom.step2Header) {
+                dom.step2Header.innerHTML = `<h2 class="text-2xl font-semibold mb-2 text-white">${t('debate.in_progress_title')}</h2><p class="text-gray-400">${t('debate.in_progress_subtitle')}</p>`;
+            }
+            
+            try {
+                const response = await fetchWithRetries(`${API_BASE_URL}/api/debate`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: state.prompt, history: state.history, creative_mode: window.CREATIVE_MODE, lang: localStorage.getItem('crisalia_lang') || 'en', prior_llm_response: (document.getElementById('prior-llm-response')?.value || '').trim() || null }),
+                });
+                updateTimeline(3);
+                clearTimeout(analysisTimeout);
+                const result = await response.json();
+                Object.keys(result.revised).forEach(model => {
+                    state.initial_responses[model].content = result.revised[model];
+                    const contentDiv = document.getElementById(`content-${model}`);
+                    if (contentDiv) {
+                        contentDiv.innerHTML = marked.parse(result.revised[model]);
+                        const actionsDiv = document.getElementById(`actions-${model}`);
+                        if(actionsDiv) actionsDiv.classList.add('hidden');
+                    }
+                });
+                state.synthesis = result.synthesis;
+                state.history.push({ prompt: state.prompt, synthesis: result.synthesis });
+                dom.finalResultContainer.classList.remove('hidden');
+                const highlightedHTML = await highlightSynthesisSources(state.synthesis);
+                const debateTitle = result.creative_mode
+                    ? `${t('debate.synthesis_title')} <span class="text-xs px-2 py-0.5 bg-violet-900/60 text-violet-300 rounded-full ml-2 font-normal">${t('creative.badge')}</span>`
+                    : t('debate.synthesis_title');
+                dom.finalResultContainer.innerHTML = templates.finalResultCard(debateTitle, highlightedHTML);
+                dom.finalResultContainer.scrollIntoView({behavior: 'smooth', block: 'start' });
+                attachFinalCardListeners();
+                updateTimeline(4);
+                
+                // Usar análisis mejorado si está disponible
+                if (window.dialecticEnhancements && window.dialecticEnhancements.calculateAndDisplayConsensusEnhanced) {
+                    window.dialecticEnhancements.calculateAndDisplayConsensusEnhanced();
+                } else {
+                    calculateAndDisplayConsensus();
+                }
+            } catch (error) {
+                clearTimeout(analysisTimeout);
+                dom.responsesGrid.innerHTML = templates.errorCard(error);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function handleRefine(synthesisType, title) {
+            updateTimeline(3);
+            setLoading(true, `Desarrollando ${title}...`);
+            clearTimeout(analysisTimeout);
+            analysisTimeout = setTimeout(handleTimeoutError, 600000); // CAMBIADO A 6 MINUTOS
+            dom.finalResultContainer.innerHTML = `<div class="card-glow p-8 text-center text-gray-400 animate-pulse">Desarrollando ${title}...</div>`;
+            dom.finalResultContainer.classList.remove('hidden');
+            try {
+                const response = await fetchWithRetries(`${API_BASE_URL}/api/refine`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: state.prompt, decisions: state.decisions, initial_responses: state.initial_responses, synthesis_type: synthesisType, history: state.history })
+                });
+                clearTimeout(analysisTimeout);
+                const result = await response.json();
+                state.synthesis = result.synthesis;
+                state.history.push({ prompt: state.prompt, synthesis: result.synthesis });
+                const highlightedHTML = await highlightSynthesisSources(state.synthesis);
+                dom.finalResultContainer.innerHTML = templates.finalResultCard(title, highlightedHTML);
+                dom.finalResultContainer.scrollIntoView({behavior: 'smooth', block: 'start' });
+                attachFinalCardListeners();
+                updateTimeline(4);
+            } catch (error) {
+                clearTimeout(analysisTimeout);
+                console.error(`Error durante el refinamiento (${synthesisType}):`, error);
+                dom.finalResultContainer.innerHTML = templates.errorCard(error);
+            } finally { 
+                setLoading(false); 
+            }
+        }
+
+        // FUNCIÓN CORREGIDA - DEFINIDA UNA SOLA VEZ
+        async function calculateAndDisplayConsensus() {
+            console.log('=== INICIANDO ANÁLISIS SEMÁNTICO CON CLAUDE ===');
+            
+            const responses = {
+                gemini: state.initial_responses.gemini.content || '',
+                deepseek: state.initial_responses.deepseek.content || '',
+                claude: state.initial_responses.claude.content || ''
+            };
+            
+            console.log('📊 DEBUGGING - Respuestas enviadas al análisis:');
+            console.log('Gemini length:', responses.gemini.length, 'Start:', responses.gemini.substring(0, 80) + '...');
+            console.log('DeepSeek length:', responses.deepseek.length, 'Start:', responses.deepseek.substring(0, 80) + '...');
+            console.log('Claude length:', responses.claude.length, 'Start:', responses.claude.substring(0, 80) + '...');
+            
+            try {
+                // Llamar al análisis semántico del backend
+                const response = await fetchWithRetries(`${API_BASE_URL}/api/semantic-consensus`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ responses: responses })
+                });
+                
+                const analysis = await response.json();
+                console.log('✅ Análisis semántico recibido:', analysis);
+                
+                const score = analysis.consensus_score || 50;
+                
+                // Buscar los elementos del DOM
+                const consensusContainer = document.getElementById('consensus-container');
+                const consensusScore = document.getElementById('consensus-score'); 
+                const consensusBar = document.getElementById('consensus-bar');
+                const consensusStatus = document.getElementById('consensus-status');
+                
+                // Mostrar el contenedor de consenso
+                if (consensusContainer) {
+                    consensusContainer.classList.remove('hidden');
+                }
+                
+                // Mostrar el porcentaje real
+                if (consensusScore) {
+                    consensusScore.textContent = `${score}%`;
+                }
+                
+                // Animar la barra con porcentaje real
+                if (consensusBar) {
+                    setTimeout(() => {
+                        consensusBar.style.width = `${score}%`;
+                    }, 100);
+                }
+                
+                // LIMPIAR Y MOSTRAR análisis detallado de Claude
+                if (consensusStatus && analysis) {
+                    consensusStatus.innerHTML = '';
+                    
+                    const strongCount = analysis.strong_consensus ? analysis.strong_consensus.length : 0;
+                    const moderateCount = analysis.moderate_consensus ? analysis.moderate_consensus.length : 0;
+                    
+                    consensusStatus.innerHTML = `
+                        <div class="text-sm text-gray-300 mt-2">
+                            <div class="mb-1"><strong>Análisis semántico:</strong> ${strongCount} consensos fuertes, ${moderateCount} moderados</div>
+                            ${analysis.explanation ? `<div class="text-xs text-gray-400 mb-2">${analysis.explanation}</div>` : ''}
+                            <details class="cursor-pointer">
+                                <summary class="text-violet-400 hover:text-violet-300">Ver desglose detallado</summary>
+                                <div class="mt-2 text-xs space-y-1 bg-gray-900/50 p-2 rounded">
+                                    ${strongCount > 0 ? `<div><strong class="text-green-400">Consenso fuerte:</strong> ${analysis.strong_consensus.join(', ')}</div>` : ''}
+                                    ${moderateCount > 0 ? `<div><strong class="text-yellow-400">Consenso moderado:</strong> ${analysis.moderate_consensus.join(', ')}</div>` : ''}
+                                    ${analysis.divergence_areas && analysis.divergence_areas.length > 0 ? `<div><strong class="text-red-400">Divergencias:</strong> ${analysis.divergence_areas.join(', ')}</div>` : ''}
+                                </div>
+                            </details>
+                        </div>
+                    `;
+                }
+                
+               // CRÍTICO: ACTIVAR OPCIONES DE REFINAMIENTO EN MODO DEBATE
+const selectedMode = document.querySelector('input[name="analysisMode"]:checked')?.value;
+if (selectedMode === 'debate') {
+    console.log('🔄 Activando sistema dialéctico avanzado');
+    setTimeout(() => {
+        if (window.dialecticEnhancements && window.dialecticEnhancements.handleAdvancedLowConsensus) {
+            console.log('✅ Ejecutando handleAdvancedLowConsensus con forceShow=true');
+            // CRÍTICO: Pasar forceShow=true para mostrar opciones siempre en modo debate
+            window.dialecticEnhancements.handleAdvancedLowConsensus(state.initial_responses, score, true);
+        } else {
+            console.log('⚠️ Usando fallback showBasicRefinementOptions');
+            showBasicRefinementOptions(score);
+        }
+        
+        
+    }, 500);
+}
+                
+                return score;
+                
+            } catch (error) {
+                console.error('❌ Error en análisis semántico:', error);
+                const consensusContainer = document.getElementById('consensus-container');
+                const consensusScore = document.getElementById('consensus-score'); 
+                const consensusBar = document.getElementById('consensus-bar');
+                
+                if (consensusContainer) consensusContainer.classList.remove('hidden');
+                if (consensusScore) consensusScore.textContent = '50%';
+                if (consensusBar) setTimeout(() => { consensusBar.style.width = '50%'; }, 100);
+                return 50;
+            }
+        }
+
+        // Función fallback para mostrar opciones básicas de refinamiento
+        function showBasicRefinementOptions(currentScore) {
+            console.log(`🔄 Mostrando opciones básicas de refinamiento con ${currentScore}% consenso`);
+            
+            const frictionContainer = document.getElementById('friction-container');
+            if (!frictionContainer) {
+                console.log('❌ friction-container no encontrado');
+                return;
+            }
+            
+            // Mostrar contenedor
+            frictionContainer.classList.remove('hidden');
+            
+            // Mostrar prompts sugeridos básicos si no hay contenido
+            const suggestedPrompts = document.getElementById('suggested-prompts');
+            if (suggestedPrompts && !suggestedPrompts.innerHTML.trim()) {
+                suggestedPrompts.innerHTML = `
+                    <div class="suggested-prompt p-4 rounded-lg cursor-pointer bg-blue-900/20 border border-blue-700/50">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="text-sm font-medium text-white">Resolver Diferencias Principales</h4>
+                            <span class="text-xs px-2 py-1 rounded-full bg-blue-700/30 text-blue-300">integration</span>
+                        </div>
+                        <p class="text-sm text-gray-300">Enfócate en reconciliar las principales diferencias conceptuales identificadas entre los modelos.</p>
+                        <button class="use-prompt-btn mt-2 text-xs px-3 py-1 rounded bg-violet-600/30 text-violet-300 hover:bg-violet-500/40">Usar este prompt</button>
+                    </div>
+                    
+                    <div class="suggested-prompt p-4 rounded-lg cursor-pointer bg-green-900/20 border border-green-700/50">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="text-sm font-medium text-white">Maximizar Consenso</h4>
+                            <span class="text-xs px-2 py-1 rounded-full bg-green-700/30 text-green-300">consensus</span>
+                        </div>
+                        <p class="text-sm text-gray-300">Construye una síntesis basada en los puntos donde todos los modelos coinciden.</p>
+                        <button class="use-prompt-btn mt-2 text-xs px-3 py-1 rounded bg-violet-600/30 text-violet-300 hover:bg-violet-500/40">Usar este prompt</button>
+                    </div>
+                `;
+                
+                // Event listeners para prompts básicos
+                suggestedPrompts.querySelectorAll('.use-prompt-btn').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        const promptContainer = e.target.closest('.suggested-prompt');
+                        const promptText = promptContainer.querySelector('p').textContent;
+                        const customPromptArea = document.getElementById('custom-refinement-prompt');
+                        if (customPromptArea) {
+                            customPromptArea.value = promptText;
+                            customPromptArea.focus();
+                        }
+                    });
+                });
+            }
+            
+            console.log('✅ Opciones básicas de refinamiento mostradas');
+        }
+
+        function updateModeDescription() { 
+            if(dom.modeDescription) { 
+                const selectedMode = document.querySelector('input[name="analysisMode"]:checked').value; 
+                dom.modeDescription.innerHTML = modeTexts[selectedMode]; 
+            } 
+        }
+        
+        function updateCardStyles() { 
+            Object.keys(state.decisions).forEach(model => { 
+                const card = document.getElementById(`card-${model}`); 
+                if (!card) return; 
+                card.classList.remove('border-green-500', 'border-red-500', 'border-transparent', 'opacity-60', 'shadow-xl'); 
+                if (state.decisions[model] === 'highlight') { 
+                    card.classList.add('border-green-500', 'shadow-xl'); 
+                } else if (state.decisions[model] === 'discard') { 
+                    card.classList.add('border-red-500', 'opacity-60'); 
+                } 
+            }); 
+        }
+        
+        function handleDecision(event) { 
+            const target = event.target.closest('.action-btn'); 
+            if (!target) return; 
+            const model = target.dataset.model; 
+            const action = target.dataset.action; 
+            state.decisions[model] = state.decisions[model] === action ? 'normal' : action; 
+            updateCardStyles(); 
+        }
+        
+        function handleReusePromptClick() { 
+            dom.promptInput.value = ""; 
+            state.isRefining = true; 
+            if (dom.step1Title) dom.step1Title.innerText = t('btn.deepen');
+            if (dom.generateBtn) dom.generateBtn.innerText = t('btn.deepen');
+            dom.step1.scrollIntoView({behavior: 'smooth' }); 
+            dom.promptInput.focus(); 
+        }
+        
+        function generatePlainTextContent(includeFullSession = true) {
+            let content = `${t('export.title')}\n================================\n\n`;
+            content += `${t('export.initial_query')} ${state.prompt}\n\n`;
+            if (includeFullSession && state.history.length > 0) {
+                content += `${t('export.trace')}\n---------------------------------------\n`;
+                state.history.forEach((turn, index) => {
+                    content += `\n${t('export.iteration')} ${index + 1}:\n  ${t('export.query')} ${turn.prompt}\n  ${t('export.response')} ${turn.synthesis}\n---\n`;
+                });
+            }
+            if (state.synthesis) {
+                content += `\n${t('export.final_result')}\n================\n`;
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = state.synthesis;
+                content += tempDiv.innerText;
+            }
+            return content;
+        }
+        
+        function generateSafeFilename() { 
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-'); 
+            const promptSnippet = state.prompt.slice(0, 30).replace(/[^a-zA-Z0-9\s]/g, "").replace(/\s+/g, '_'); 
+            return `Crisalia_${promptSnippet}_${timestamp}`; 
+        }
+        async function detectAndWarnTemporal(userPrompt) {
+            const analysisPrompt = `
+Analiza si esta consulta requiere información en tiempo real o reciente:
+
+"${userPrompt}"
+
+Responde SOLO con JSON válido:
+{
+    "requiresRecentData": true/false
+}
+
+DETECTAR:
+- Cotizaciones actuales, precios de mercado
+- Eventos políticos recientes, escándalos
+- Noticias de última semana/mes  
+- Estados actuales de situaciones cambiantes
+- Información que cambia frecuentemente
+
+NO DETECTAR:
+- Conceptos generales, teorías
+- Historia pasada establecida
+- Definiciones que no cambian
+- Datos estructurales estables
+`;
+
+            try {
+                const response = await fetchWithRetries(`${API_BASE_URL}/api/generate-initial`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        prompt: analysisPrompt, 
+                        history: [], 
+                        model: 'claude' 
+                    }),
+                });
+                
+                const result = await response.json();
+                const analysis = JSON.parse(result.response);
+                
+                if (analysis.requiresRecentData) {
+                    showTemporalWarningBox();
+                }
+            } catch (error) {
+                console.error('Error en detección temporal:', error);
+            }
+        }
+        function showTemporalWarningBox() {
+            // Verificar que no exista ya un warning
+            const existingWarning = document.getElementById('temporal-warning-box');
+            if (existingWarning) return;
+            
+            const warningHTML = `
+                <div id="temporal-warning-box" class="mb-6 p-4 bg-amber-900/20 border border-amber-500/50 rounded-lg">
+                    <div class="flex items-start">
+                        <svg class="w-5 h-5 text-amber-400 mr-3 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div>
+                            <p class="text-amber-200 text-sm font-medium">
+                                Esta consulta requiere datos en tiempo real o relativamente recientes. No todos los modelos de IA pueden resolver esto sin más información.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Insertar después del contenedor de consenso o antes del step2
+            const step2 = document.getElementById('step2');
+            if (step2) {
+                step2.insertAdjacentHTML('beforebegin', warningHTML);
+            }
+        }
+        function downloadToFile(content, filename, contentType) { 
+            const blob = new Blob([content], { type: contentType }); 
+            const url = URL.createObjectURL(blob); 
+            const a = document.createElement('a'); 
+            a.href = url; 
+            a.download = filename; 
+            document.body.appendChild(a); 
+            a.click(); 
+            document.body.removeChild(a); 
+            URL.revokeObjectURL(url); 
+        }
+        
+        function attachFinalCardListeners(){ 
+            if (document.getElementById('reuse-prompt-btn')) document.getElementById('reuse-prompt-btn').addEventListener('click', handleReusePromptClick); 
+            if (document.getElementById('copy-btn')) document.getElementById('copy-btn').addEventListener('click', () => navigator.clipboard.writeText(generatePlainTextContent()).then(() => alert('Reporte copiado!')));
+            if (document.getElementById('download-txt-btn')) document.getElementById('download-txt-btn').addEventListener('click', () => downloadToFile(generatePlainTextContent(), `${generateSafeFilename()}.txt`, 'text/plain')); 
+            if (document.getElementById('download-pdf-btn')) { 
+    document.getElementById('download-pdf-btn').addEventListener('click', () => { 
+        window.print();
+    }); 
+}
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeApp();
+            if (dom.generateBtn) dom.generateBtn.addEventListener('click', handleGenerateClick);
+            if (dom.refineSummaryBtn) dom.refineSummaryBtn.addEventListener('click', () => handleRefine('summary', t('refine.summary_title')));
+            if (dom.refineReportBtn) dom.refineReportBtn.addEventListener('click', () => handleRefine('report', t('refine.report_title')));
+            if (dom.responsesGrid) dom.responsesGrid.addEventListener('click', handleDecision);
+            if (dom.fileUploader) dom.fileUploader.addEventListener('change', handleFileSelect);
+            if (dom.refineDebateBtn) dom.refineDebateBtn.addEventListener('click', handleRefineDebate);
+            
+            const modeRadios = document.querySelectorAll('input[name="analysisMode"]');
+            if (modeRadios.length) {
+                modeRadios.forEach(radio => radio.addEventListener('change', updateModeDescription));
+                updateModeDescription();
+            }
+
+            // Tema oscuro/claro (solo estético para la demostración)
+            const themeToggle = document.getElementById('theme-toggle');
+            if (themeToggle) {
+                themeToggle.addEventListener('click', () => {
+                    document.body.classList.toggle('bg-gray-100');
+                    document.body.classList.toggle('text-gray-800');
+                    document.body.classList.toggle('bg-[#0A0910]');
+                    document.body.classList.toggle('text-gray-300');
+                    
+                    const cards = document.querySelectorAll('.card-glow');
+                    cards.forEach(card => {
+                        card.classList.toggle('bg-white');
+                        card.classList.toggle('bg-[#111827]');
+                        card.classList.toggle('text-gray-800');
+                        card.classList.toggle('text-gray-300');
+                    });
+                    
+                    const isDark = document.body.classList.contains('bg-[#0A0910]');
+                    themeToggle.innerHTML = isDark ? 
+                        '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>' :
+                        '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>';
+                });
+            }
+
+            // Drag & Drop funcionalidad
+            const fileUploader = document.getElementById('file-uploader');
+            const dropZone = fileUploader.parentElement;
+            
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, preventDefaults, false);
+                document.body.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, highlight, false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, unhighlight, false);
+            });
+            
+            function highlight(e) {
+                dropZone.style.borderColor = '#7C3AED';
+                dropZone.style.backgroundColor = 'rgba(124, 58, 237, 0.1)';
+                dropZone.style.transform = 'scale(1.02)';
+                dropZone.style.transition = 'all 0.2s ease';
+            }
+            
+            function unhighlight(e) {
+                dropZone.style.borderColor = '#4B5563';
+                dropZone.style.backgroundColor = 'transparent';
+                dropZone.style.transform = 'scale(1)';
+            }
+            
+            dropZone.addEventListener('drop', handleDrop, false);
+            
+            function handleDrop(e) {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+
+    if (files.length > 0) {
+        // VERIFICAR QUE TODOS LOS ARCHIVOS SEAN VÁLIDOS
+        const allowedTypes = ['.txt', '.md', '.pdf', 'text/plain', 'application/pdf'];
+        let allFilesValid = true;
+        for (const file of files) {
+            const isValidType = allowedTypes.some(type => 
+                file.type === type || file.name.toLowerCase().endsWith(type)
+            );
+            if (!isValidType) {
+                allFilesValid = false;
+                break;
+            }
+        }
+
+        if (allFilesValid) {
+            // Si todos son válidos, los asignamos y disparamos el evento
+            const fileUploader = document.getElementById('file-uploader');
+            fileUploader.files = files;
+
+            const event = new Event('change', { bubbles: true });
+            fileUploader.dispatchEvent(event);
+
+            dropZone.style.borderColor = '#10B981';
+            dropZone.style.backgroundColor = 'rgba(16, 185, 129, 0.1)';
+            setTimeout(() => {
+                dropZone.style.borderColor = '#4B5563';
+                dropZone.style.backgroundColor = 'transparent';
+            }, 2000);
+
+        } else {
+            alert('Uno o más archivos tienen un formato no soportado. Use solo .txt, .md o .pdf');
+
+            dropZone.style.borderColor = '#EF4444';
+            dropZone.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+            setTimeout(() => {
+                dropZone.style.borderColor = '#4B5563';
+                dropZone.style.backgroundColor = 'transparent';
+            }, 2000);
+        }
+    }
+}
+            
+            const dropZoneText = dropZone.querySelector('span');
+            if (dropZoneText && dropZoneText.textContent.includes('Selecciona un documento')) {
+                dropZoneText.textContent = 'Selecciona un documento (.txt, .md, .pdf) o arrastra aquí';
+            }
+
+            // Inicializar mejoras dialécticas con verificación
+            if (window.dialecticEnhancements) {
+                console.log('🔧 Inicializando dialectic enhancements...');
+                window.dialecticEnhancements.initDialecticEnhancements();
+            } else {
+                console.log('⚠️ dialectic-enhancements no disponible, usando funcionalidad básica');
+            }
+
+            // Asegurar que el botón de refinamiento funcione
+            const refineDebateBtn = document.getElementById('refine-debate-btn');
+            if (refineDebateBtn) {
+                // Remover listeners existentes
+                const newBtn = refineDebateBtn.cloneNode(true);
+                refineDebateBtn.parentNode.replaceChild(newBtn, refineDebateBtn);
+                
+                // Agregar nuevo listener
+                newBtn.addEventListener('click', function() {
+                    if (window.dialecticEnhancements && window.dialecticEnhancements.handleAdvancedRefineDebate) {
+                        window.dialecticEnhancements.handleAdvancedRefineDebate();
+                    } else {
+                        handleRefineDebate(); // Fallback a función original
+                    }
+                });
+                console.log('✅ Botón refine-debate-btn configurado correctamente');
+            }
+
+            console.log('✅ Inicialización completa terminada');
+        });
+
+        // JavaScript para NDA
+        const ndaOverlay = document.getElementById('nda-overlay');
+        const ndaAccept = document.getElementById('nda-accept');
+        const ndaDecline = document.getElementById('nda-decline');
+
+        // Verificar si ya aceptó el NDA
+        if (sessionStorage.getItem('nda-accepted') === 'true') {
+            if (ndaOverlay) ndaOverlay.style.display = 'none';
+        } else if (ndaOverlay) {
+            // Mostrar NDA automáticamente
+            ndaOverlay.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+
+        // Manejar aceptación NDA
+        ndaAccept?.addEventListener('click', function() {
+            sessionStorage.setItem('nda-accepted', 'true');
+            sessionStorage.setItem('nda-timestamp', new Date().toISOString());
+            
+            ndaOverlay.style.opacity = '0';
+            ndaOverlay.style.transition = 'opacity 0.3s ease';
+            
+            setTimeout(() => {
+                ndaOverlay.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            }, 300);
+        });
+
+        // Manejar rechazo NDA
+        ndaDecline?.addEventListener('click', function() {
+            alert('Access denied. You will be redirected.');
+            window.location.href = 'https://www.google.com';
+        });
+
+        // Prevenir cierre accidental NDA
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && ndaOverlay && ndaOverlay.style.display !== 'none') {
+                e.preventDefault();
+            }
+        });
+
+        ndaOverlay?.addEventListener('click', function(e) {
+            if (e.target === ndaOverlay) {
+                e.preventDefault();
+                if (ndaAccept) ndaAccept.style.animation = 'pulse 0.5s ease-in-out 2';
+            }
+        });
+
+        // JavaScript para Modal Agradecimientos
+        const acknowledgmentBtn = document.getElementById('acknowledgments-btn');
+        const acknowledgmentModal = document.getElementById('acknowledgments-modal');
+        const closeAcknowledgment = document.getElementById('close-acknowledgments');
+
+        // Abrir modal agradecimientos
+        acknowledgmentBtn?.addEventListener('click', function(e) {
+            e.preventDefault();
+            acknowledgmentModal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        });
+
+        // Cerrar modal agradecimientos
+        function closeAcknowledgmentModal() {
+            acknowledgmentModal.classList.add('hidden');
+            document.body.style.overflow = 'auto';
+        }
+
+        closeAcknowledgment?.addEventListener('click', closeAcknowledgmentModal);
+
+        // Cerrar con Escape (solo si NDA no está abierto)
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && acknowledgmentModal && !acknowledgmentModal.classList.contains('hidden')) {
+                closeAcknowledgmentModal();
+            }
+        });
+
+        // Cerrar clickeando fuera
+        acknowledgmentModal?.addEventListener('click', function(e) {
+            if (e.target === acknowledgmentModal) {
+                closeAcknowledgmentModal();
+            }
+        });
+
+        console.log('✅ Scripts NDA y Agradecimientos cargados correctamente');
+        // ==============================================================================
+// INICIO DEL CÓDIGO A PEGAR
+// ==============================================================================
+async function displayFinalResults(synthesis, revised_responses, history, isDocument) {
+    const container = document.getElementById('final-result-container');
+    if (!container) return;
+
+    // Poblar la Síntesis
+    const synthesisTab = container.querySelector('#tab-sintesis .prose');
+    if (synthesisTab) {
+        const highlightedHTML = await highlightSynthesisSources(synthesis);
+        synthesisTab.innerHTML = `<p>${highlightedHTML.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`;
+    }
+
+    // Poblar los Argumentos Finales
+    const argumentosTab = container.querySelector('#tab-argumentos > div');
+    if (argumentosTab) {
+        let a_html = '';
+        for (const model in revised_responses) {
+            a_html += `
+                <div class="bg-gray-900 rounded-lg border border-gray-700 p-6">
+                    <div class="flex items-center mb-4">
+                        <span class="w-4 h-4 rounded-full ${model === 'gemini' ? 'bg-[#4285F4]' : model === 'deepseek' ? 'bg-[#34A853]' : 'bg-[#D48105]'} mr-3"></span>
+                        <h3 class="text-lg font-semibold text-white capitalize">${model}</h3>
+                    </div>
+                    <div class="text-sm text-gray-300 space-y-3">${marked.parse(revised_responses[model])}</div>
+                </div>`;
+        }
+        argumentosTab.innerHTML = a_html;
+    }
+
+    // Poblar el Historial de Análisis
+    const historialTab = container.querySelector('#tab-historial > div');
+    if (historialTab) {
+        let h_html = '';
+        history.forEach((turn, index) => {
+            h_html += `
+            <div class="flex mb-4">
+                <div class="flex items-center justify-center w-8 h-8 rounded-full bg-gray-700 text-violet-300 font-bold mr-4">${index + 1}</div>
+                <div class="flex-1">
+                    <h4 class="text-md font-semibold text-white">Consulta de Iteración ${index + 1}</h4>
+                    <p class="text-sm text-gray-400 mt-1">${turn.prompt}</p>
+                </div>
+            </div>`;
+        });
+        historialTab.innerHTML = h_html;
+    }
+    
+    // LÓGICA DE FACT-CHECKING AUTOMÁTICO
+    const consensusScoreValue = parseInt(document.getElementById('consensus-score')?.textContent || '100');
+    if (!isDocument && consensusScoreValue < 75) {
+        synthesisTab.innerHTML += `<div id="fact-check-report" class="mt-8 pt-6 border-t border-yellow-500/30 animate-pulse">
+            <h4 class="text-yellow-300 font-semibold mb-3">Verificación Factual en Progreso...</h4>
+            <p class="text-sm text-gray-400">Consenso bajo detectado (${consensusScoreValue}%). Verificando afirmaciones clave de la síntesis...</p>
+        </div>`;
+        
+        try {
+            const fc_response = await fetch(`${API_BASE_URL}/api/fact-check`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text_to_check: synthesis, original_query: state.prompt })
+            });
+            const fc_data = await fc_response.json();
+            const reportContainer = document.getElementById('fact-check-report');
+            if (reportContainer && fc_data.status === 'success') {
+                reportContainer.classList.remove('animate-pulse');
+                let report_html = '<h4 class="text-yellow-300 font-semibold mb-3">Reporte de Verificación Factual</h4>';
+                if (Array.isArray(fc_data.report)) {
+                    fc_data.report.forEach(item => {
+                        let color = 'text-gray-400';
+                        let icon = '⚪️';
+                        if (item.status === 'Verificado') { color = 'text-green-400'; icon = '✅'; }
+                        if (item.status === 'Refutado') { color = 'text-red-400'; icon = '❌'; }
+                        if (item.status === 'Incierto') { color = 'text-yellow-400'; icon = '⚠️'; }
+                        report_html += `<div class="text-sm mb-2"><strong class="${color}">${icon} [${item.status}]</strong> "${item.claim}" ${item.status === 'Refutado' ? `(Corrección sugerida: ${item.correction})` : ''}</div>`;
+                    });
+                } else {
+                    report_html += `<p class="text-sm text-gray-400">✅ ${fc_data.report}</p>`;
+                }
+                reportContainer.innerHTML = report_html;
+            }
+        } catch (e) {
+             const reportContainer = document.getElementById('fact-check-report');
+             if(reportContainer) reportContainer.innerHTML = '<p class="text-red-400">Error: El servicio de Fact-Checking no está disponible.</p>';
+        }
+    }
+
+
+    // Lógica para controlar las pestañas
+    const tabButtons = container.querySelectorAll('.tab-button');
+    const tabContents = container.querySelectorAll('.tab-content');
+    tabButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const targetTab = this.getAttribute('data-tab');
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            this.classList.add('active');
+            tabContents.forEach(content => content.id === `tab-${targetTab}` ? content.classList.remove('hidden') : content.classList.add('hidden'));
+        });
+    });
+    // Activar la primera pestaña por defecto
+    tabButtons[0]?.classList.add('active');
+    tabContents.forEach((c,i) => i === 0 ? c.classList.remove('hidden') : c.classList.add('hidden'));
+
+
+    container.classList.remove('hidden');
+    container.scrollIntoView({ behavior: 'smooth' });
+    attachFinalCardListeners();
+}
+// ==============================================================================
+// FIN DEL CÓDIGO A PEGAR
+// ==============================================================================
+    </script>
+</body>
+</html>
