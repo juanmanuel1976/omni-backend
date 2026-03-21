@@ -109,6 +109,12 @@ class FeedbackRequest(BaseModel):
     comment: Optional[str] = None
     query_id: Optional[str] = None
 
+class BlindJudgeRequest(BaseModel):
+    prompt: str
+    response_text: str
+    judge: str        # gemini, deepseek, claude
+    lang: str = 'es'
+
 class SemanticConsensusRequest(BaseModel):
     responses: Dict[str, str]
 
@@ -990,6 +996,50 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     )
 
     return { "revised": revised_responses, "synthesis": final_synthesis, "initial": initial_responses, "dissidenceContext": request.dissidenceContext, "creative_mode": request.creative_mode, "gpt_evaluation": gpt_evaluation }
+
+@app.post('/api/blind-judge')
+async def blind_judge_endpoint(request: BlindJudgeRequest):
+    """Un LLM evalúa ciegamente una respuesta anónima. No sabe qué modelo la produjo.
+    Devuelve score 1-10, explicación de por qué, y qué falló específicamente."""
+    if request.judge not in ('gemini', 'deepseek', 'claude'):
+        raise HTTPException(status_code=422, detail="judge must be gemini, deepseek or claude")
+    if request.lang == 'es':
+        eval_prompt = (
+            f"Eres un evaluador experto e imparcial. Debes evaluar la calidad de una respuesta anónima "
+            f"a la siguiente pregunta. No sabes qué sistema o modelo generó esta respuesta.\n\n"
+            f"**Pregunta:**\n{request.prompt}\n\n"
+            f"**Respuesta a evaluar:**\n{request.response_text}\n\n"
+            f"Evalúa con estos criterios: (1) ¿Responde completamente la pregunta? "
+            f"(2) ¿Considera múltiples perspectivas? (3) ¿Los argumentos son sólidos y específicos? "
+            f"(4) ¿Es accionable y útil para quien pregunta?\n\n"
+            f"Responde ÚNICAMENTE en formato JSON exacto:\n"
+            f'{{ "score": <número del 1 al 10>, '
+            f'"explanation": "<por qué merece ese puntaje, sé específico en 2-3 oraciones>", '
+            f'"failed": "<qué le falta o falló específicamente, o ninguno si está completa>" }}'
+        )
+    else:
+        eval_prompt = (
+            f"You are an expert and impartial evaluator. Evaluate the quality of an anonymous response "
+            f"to the following question. You do not know which system or model generated this response.\n\n"
+            f"**Question:**\n{request.prompt}\n\n"
+            f"**Response to evaluate:**\n{request.response_text}\n\n"
+            f"Evaluate with these criteria: (1) Does it fully answer the question? "
+            f"(2) Does it consider multiple perspectives? (3) Are the arguments solid and specific? "
+            f"(4) Is it actionable and useful for the person asking?\n\n"
+            f"Respond ONLY in exact JSON format:\n"
+            f'{{ "score": <number from 1 to 10>, '
+            f'"explanation": "<why it deserves that score, be specific in 2-3 sentences>", '
+            f'"failed": "<what is missing or failed specifically, or none if complete>" }}'
+        )
+    raw = await call_ai_model_no_stream(request.judge, eval_prompt, endpoint="/api/blind-judge")
+    try:
+        start = raw.find('{')
+        end = raw.rfind('}') + 1
+        result = json.loads(raw[start:end])
+    except Exception:
+        result = {"score": None, "explanation": raw[:500], "failed": "parse error"}
+    return result
+
 
 @app.post('/api/feedback')
 async def submit_feedback(request: FeedbackRequest):
