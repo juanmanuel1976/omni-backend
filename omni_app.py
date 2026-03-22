@@ -1148,6 +1148,21 @@ async def health_check():
         "version": "6.2.1",
         "features": ["dialectic_enhancements", "user_directed_refinement", "rag_pipeline"]
     }
+
+@app.get("/api/web-test")
+async def web_test():
+    """Debug: verifica si TAVILY_API_KEY está disponible y si la búsqueda web funciona."""
+    key_set = bool(TAVILY_API_KEY)
+    key_preview = (TAVILY_API_KEY[:8] + "...") if TAVILY_API_KEY else None
+    if not key_set:
+        return {"key_set": False, "key_preview": None, "tavily_ok": False, "error": "TAVILY_API_KEY not in environment"}
+    result = await web_search("precio dolar Argentina", max_results=1)
+    return {
+        "key_set": key_set,
+        "key_preview": key_preview,
+        "tavily_ok": bool(result),
+        "result_preview": result[:200] if result else None
+    }
 @app.get("/api/rag-stats")
 async def get_rag_stats():
     """Endpoint para monitorear el estado del RAG Manager."""
