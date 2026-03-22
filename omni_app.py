@@ -151,7 +151,7 @@ async def log_user_query_supabase(endpoint: str, prompt: str, extra_info: dict =
         }
         info = extra_info or {}
         if sintesis:
-            info["sintesis"] = sintesis[:3000]  # truncar para evitar payloads enormes
+            info["sintesis"] = sintesis  # sin truncado — guardamos completo
         payload = {
             "fecha_hora": datetime.now(TZ_BA).isoformat(),
             "endpoint": endpoint,
@@ -187,18 +187,18 @@ async def log_debate_supabase(
             "timestamp":        datetime.now(TZ_BA).isoformat(),
             "lang":             lang,
             "duration_ms":      duration_ms,
-            "prompt":           (prompt or "")[:2000],
-            "initial_gemini":   (initial_responses.get("gemini") or "")[:3000],
-            "initial_deepseek": (initial_responses.get("deepseek") or "")[:3000],
-            "initial_claude":   (initial_responses.get("claude") or "")[:3000],
-            "revised_gemini":   (revised_responses.get("gemini") or "")[:3000],
-            "revised_deepseek": (revised_responses.get("deepseek") or "")[:3000],
-            "revised_claude":   (revised_responses.get("claude") or "")[:3000],
-            "synthesis":        (synthesis or "")[:3000],
-            "gpt_audit":        (gpt_audit or "")[:1000],
+            "prompt":           (prompt or ""),
+            "initial_gemini":   (initial_responses.get("gemini") or ""),
+            "initial_deepseek": (initial_responses.get("deepseek") or ""),
+            "initial_claude":   (initial_responses.get("claude") or ""),
+            "revised_gemini":   (revised_responses.get("gemini") or ""),
+            "revised_deepseek": (revised_responses.get("deepseek") or ""),
+            "revised_claude":   (revised_responses.get("claude") or ""),
+            "synthesis":        (synthesis or ""),
+            "gpt_audit":        (gpt_audit or ""),
             "gpt_score":        gpt.get("score"),
-            "gpt_observation":  (gpt.get("observation") or "")[:1000],
-            "gpt_missed":       (gpt.get("missed") or "")[:500],
+            "gpt_observation":  (gpt.get("observation") or ""),
+            "gpt_missed":       (gpt.get("missed") or ""),
             "is_document":      bool(is_document),
             "improve_mode":     bool(improve_mode),
             "creative_mode":    bool(creative_mode),
@@ -961,7 +961,7 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     # GPT audita el debate antes de la síntesis — inyecta informe de gaps para que Gemini los cubra
     debate_points_for_audit = list(revised_responses.values())
     anonymous_debate = "\n\n".join([
-        f"- Perspectiva {i+1}: {p[:600]}..." if len(p) > 600 else f"- Perspectiva {i+1}: {p}"
+        f"- Perspectiva {i+1}: {p}"
         for i, p in enumerate(debate_points_for_audit)
     ])
     audit_report = await call_gpt_auditor(request.prompt, anonymous_debate, request.lang, current_date)
@@ -974,7 +974,7 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     # GPT juez ciego — resumen anónimo del debate sin atribuir modelos
     debate_points = list(revised_responses.values())
     anonymous_summary = "\n\n".join([
-        f"- Perspectiva {i+1}: {p[:500]}..." if len(p) > 500 else f"- Perspectiva {i+1}: {p}"
+        f"- Perspectiva {i+1}: {p}"
         for i, p in enumerate(debate_points)
     ])
     gpt_evaluation = await call_gpt_judge(request.prompt, anonymous_summary, final_synthesis, request.lang)
