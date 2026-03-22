@@ -43,6 +43,7 @@ GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
 
 # CLAVES DE SUPABASE PARA LOGS EN SEGUNDO PLANO
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -524,6 +525,44 @@ Respond in exact JSON format:
         return {"score": None, "observation": f"Error: {e}"}
 
 
+async def web_search(query: str, max_results: int = 5) -> str:
+    """Realiza una búsqueda web via Tavily y devuelve los resultados formateados como contexto para los LLMs.
+    Se activa cuando el prompt comienza con 'w.' """
+    if not TAVILY_API_KEY:
+        return ""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                "https://api.tavily.com/search",
+                json={
+                    "api_key": TAVILY_API_KEY,
+                    "query": query,
+                    "search_depth": "basic",
+                    "max_results": max_results,
+                    "include_answer": True,
+                }
+            )
+            if resp.status_code != 200:
+                logger.error(f"[web_search] Tavily error {resp.status_code}: {resp.text[:200]}")
+                return ""
+            data = resp.json()
+    except Exception as e:
+        logger.error(f"[web_search] Request failed: {e}")
+        return ""
+
+    lines = ["**[BÚSQUEDA WEB EN TIEMPO REAL — resultados recuperados ahora mismo]**"]
+    if data.get("answer"):
+        lines.append(f"**Respuesta rápida:** {data['answer']}")
+    for i, r in enumerate(data.get("results", []), 1):
+        lines.append(f"\n**Fuente {i}: {r.get('title', '')}**")
+        lines.append(f"URL: {r.get('url', '')}")
+        content = r.get("content", "").strip()
+        if content:
+            lines.append(content[:600])
+    lines.append("\n**Instrucción:** Usa estos resultados web como fuente primaria para responder. Cita las fuentes cuando sea relevante. Si algún resultado contradice tu conocimiento de entrenamiento, prioriza los datos web.")
+    return "\n".join(lines)
+
+
 async def call_gpt_auditor(original_query: str, anonymous_debate: str, lang: str = 'en', current_date: str = "") -> str:
     """GPT audita el transcript del debate ANTES de la síntesis.
     Devuelve un informe corto: argumentos sin contrastar, puntos faltantes, coherencia.
@@ -859,6 +898,18 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
 
     lbl = _LABELS.get(request.lang, _LABELS['en'])
 
+    # --- TRIGGER w. — Búsqueda web en tiempo real ---
+    web_context = ""
+    clean_prompt = request.prompt.strip()
+    WEB_TRIGGER = clean_prompt.lower().startswith("w.")
+    if WEB_TRIGGER and TAVILY_API_KEY:
+        search_query = clean_prompt[2:].strip()  # quita el "w." y espacios
+        web_context = await web_search(search_query)
+        # Para el debate usamos el prompt sin el prefijo "w."
+        contextual_prompt = build_contextual_prompt(search_query, request.history, 'direct', request.isDocument)
+        if request.dissidenceContext:
+            contextual_prompt = build_enhanced_dialectic_prompt(contextual_prompt, request.dissidenceContext)
+
     # Contexto temporal — fecha actual inyectada para que los modelos sepan en qué momento responden
     current_date = datetime.now(TZ_BA).strftime("%B %Y")  # ej: "March 2026"
     if request.lang == 'es':
@@ -887,9 +938,9 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
             else "Your task is to improve that response: identify its blind spots, biases or unsupported claims, and deliver a more robust version."
         )
         prior_block = f"\n\n---\n**{improve_label}:**\n{request.prior_llm_response.strip()}\n\n{improve_instruction}\n---"
-        initial_prompt = date_context + contextual_prompt + prior_block + ambiguity_suffix
+        initial_prompt = date_context + (web_context + "\n\n" if web_context else "") + contextual_prompt + prior_block + ambiguity_suffix
     else:
-        initial_prompt = date_context + contextual_prompt + ambiguity_suffix
+        initial_prompt = date_context + (web_context + "\n\n" if web_context else "") + contextual_prompt + ambiguity_suffix
 
     initial_prompt += _CREATIVE_INITIAL.get(request.lang, _CREATIVE_INITIAL['en']) if request.creative_mode else ""
 
