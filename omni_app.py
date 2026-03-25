@@ -856,7 +856,6 @@ async def rag_analysis_and_synthesize(raw_request: Request, background_tasks: Ba
             return result
         else:
             print(f"INFO: Documento ({text_size_kb:.2f} KB) supera el umbral. Usando RAG completo (Vía Profunda).")
-            await rag_manager.initialize()
             if not await rag_manager.index_documents(raw_text, {"file_names": [f.filename for f in files]}):
                 raise HTTPException(status_code=500, detail="Error indexando documentos.")
             
