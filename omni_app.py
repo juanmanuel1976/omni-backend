@@ -1267,7 +1267,7 @@ async def validate_change(request: ValidateChangeRequest):
 
 Crisalia es una plataforma multi-IA dialéctica para profesionales que necesitan análisis robustos y libres del sesgo de un modelo único.
 Su diferencial es hacer debatir a Gemini, DeepSeek y Claude para producir síntesis superiores.
-Sus casos de uso incluyen análisis estratégico, investigación, due diligence legal y financiero, y toma de decisiones de alto impacto en cualquier industria.
+Sus casos de uso incluyen análisis estratégico, investigación, toma de decisiones de alto impacto y cualquier escenario donde múltiples perspectivas críticas mejoran el resultado.
 
 ARCHIVO AFECTADO: {request.archivo}
 
@@ -1288,7 +1288,7 @@ TU TAREA:
 1. Analizá si el cambio propuesto es correcto y seguro
 2. Identificá riesgos concretos (efectos secundarios, casos edge, dependencias rotas)
 3. Sugerí mejoras si las hay
-4. Evaluá el impacto en la monetización/usabilidad para clientes jurídicos
+4. Evaluá el impacto en la monetización/usabilidad para el caso de uso específico de esta consulta
 
 Respondé de forma concisa y técnica. Máximo 4 oraciones."""
 
