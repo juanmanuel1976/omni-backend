@@ -532,6 +532,57 @@ Respond in exact JSON format:
         return {"score": None, "observation": f"Error: {e}"}
 
 
+class GPTCompareRequest(BaseModel):
+    pregunta: str
+    respuesta_a: str
+    respuesta_b: str
+    etiqueta_a: str = "A"
+    etiqueta_b: str = "B"
+
+@app.post("/api/gpt-compare")
+async def gpt_compare(request: GPTCompareRequest):
+    """GPT-4o compara dos respuestas de forma ciega y puntúa cada una del 1 al 10."""
+    if not OPENAI_API_KEY:
+        return {"error": "GPT no configurado"}
+    prompt = f"""Sos un evaluador experto e imparcial. Recibís una pregunta y dos respuestas independientes (A y B).
+No sabés quién generó cada respuesta.
+
+PREGUNTA:
+{request.pregunta}
+
+RESPUESTA A:
+{request.respuesta_a}
+
+RESPUESTA B:
+{request.respuesta_b}
+
+Evaluá cada respuesta en estos criterios (1-10 cada uno):
+- Precisión: ¿qué tan correcta y verificable es la información?
+- Profundidad: ¿qué tan completo y matizado es el análisis?
+- Utilidad práctica: ¿qué tan accionable es para quien pregunta?
+- Estructura: ¿qué tan clara y organizada es la respuesta?
+
+Respondé SOLO en JSON exacto:
+{{
+  "A": {{"precision": 0, "profundidad": 0, "utilidad": 0, "estructura": 0, "total": 0, "veredicto": "una oración"}},
+  "B": {{"precision": 0, "profundidad": 0, "utilidad": 0, "estructura": 0, "total": 0, "veredicto": "una oración"}},
+  "ganador": "A" | "B" | "empate",
+  "razon": "una oración explicando por qué"
+}}
+El campo total es el promedio de los 4 criterios multiplicado por 10 (escala 0-100)."""
+    try:
+        async with httpx.AsyncClient(timeout=40.0) as client:
+            r = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+                json={"model": "gpt-4o", "messages": [{"role": "user", "content": prompt}],
+                      "max_tokens": 500, "temperature": 0.2, "response_format": {"type": "json_object"}},
+            )
+            return json.loads(r.json()["choices"][0]["message"]["content"])
+    except Exception as e:
+        return {"error": str(e)}
+
+
 async def web_search(query: str, max_results: int = 5) -> str:
     """Realiza una búsqueda web via Tavily y devuelve los resultados formateados como contexto para los LLMs.
     Se activa cuando el prompt comienza con 'w.' """
