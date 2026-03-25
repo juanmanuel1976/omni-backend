@@ -701,7 +701,7 @@ TU TAREA:
 1. Analizá si el cambio propuesto es correcto y seguro
 2. Identificá riesgos concretos (efectos secundarios, casos edge, dependencias rotas)
 3. Sugerí mejoras si las hay
-4. Evaluá el impacto en la monetización/usabilidad para clientes jurídicos
+4. Evaluá el impacto en la monetización/usabilidad para el caso de uso específico de esta consulta
 
 Respondé de forma concisa y técnica. Máximo 4 oraciones."""
 
