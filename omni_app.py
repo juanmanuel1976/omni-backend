@@ -245,6 +245,13 @@ async def get_text_from_files(files: List[UploadFile]) -> str:
                     raise
             elif file.content_type == 'text/plain':
                 text += file_content.decode('utf-8')
+            elif file.content_type in ('text/html', 'application/xhtml+xml') or (file.filename or '').lower().endswith('.html'):
+                raw_html = file_content.decode('utf-8', errors='ignore')
+                clean = re.sub(r'<style[^>]*>.*?</style>', ' ', raw_html, flags=re.DOTALL)
+                clean = re.sub(r'<script[^>]*>.*?</script>', ' ', clean, flags=re.DOTALL)
+                clean = re.sub(r'<[^>]+>', ' ', clean)
+                clean = re.sub(r'\s+', ' ', clean).strip()
+                text += clean
         except Exception as file_error:
             logger.error(f"ERROR general con archivo {file.filename}: {file_error}", exc_info=True)
             raise
