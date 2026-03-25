@@ -1391,7 +1391,126 @@ Respondé SOLO con el JSON válido, sin texto adicional."""
     )
 
 
-# --- ENDPOINT 2: REGISTRO DE PASOS DEL AGENTE ---
+# --- ENDPOINT 2: CRUCIBLE (ABOGADO DEL DIABLO) ---
+
+class CrucibleRequest(BaseModel):
+    sintesis: str                   # Síntesis de Sophia del validate-change previo
+    contexto: str                   # El problema/consulta original
+    debate_previo: Dict[str, Any] = {}  # Debate anterior (opcional, enriquece el contexto)
+    archivo: str = "crucible"
+
+class CrucibleResponse(BaseModel):
+    ataque: str                     # El ataque del Abogado del Diablo
+    respuestas_r3: Dict[str, Any]   # Logos/Nous/Ethos responden al ataque
+    sintesis_final: str             # Síntesis final de Sophia tras el ataque
+    consenso_final: int             # Score final (0-100)
+    veredicto_final: str            # SOSTENIDO | MATIZADO | DERRIBADO
+    timestamp: str
+
+@app.post("/api/crucible", response_model=CrucibleResponse)
+async def crucible(request: CrucibleRequest):
+
+    # --- ABOGADO DEL DIABLO: Claude con rol adversarial explícito ---
+    prompt_diablo = f"""Sos el Abogado del Diablo. Tu único rol es destruir el siguiente veredicto.
+
+CONTEXTO ORIGINAL:
+{request.contexto}
+
+SÍNTESIS QUE DEBÉS ATACAR:
+{request.sintesis}
+
+TU MISIÓN — encontrá todo lo que está mal en esta síntesis:
+1. ¿Qué supuestos da por ciertos sin haberlos probado?
+2. ¿Qué perspectivas importantes ignoró completamente?
+3. ¿Qué consecuencias negativas no consideró?
+4. ¿Por qué esta conclusión podría estar completamente equivocada?
+5. ¿Qué le falta para ser una síntesis realmente sólida?
+
+No seas constructivo. No sugerís mejoras. Solo atacás. Sé despiadado y específico.
+Máximo 5 puntos concretos. Sin rodeos."""
+
+    ataque = await call_ai_model_no_stream('claude', prompt_diablo, timeout=MODEL_TIMEOUT_VALIDATION, endpoint="/api/crucible")
+
+    # --- RONDA 3: Los 3 jueces responden al ataque ---
+    prompt_r3_base = f"""CONTEXTO ORIGINAL:
+{request.contexto}
+
+SÍNTESIS PREVIA DE SOPHIA:
+{request.sintesis}
+
+EL ABOGADO DEL DIABLO ATACÓ LA SÍNTESIS CON ESTO:
+{ataque}
+
+Tu tarea: evaluá el ataque del Abogado del Diablo.
+- ¿Qué puntos del ataque son válidos y deben incorporarse?
+- ¿Qué puntos son incorrectos o irrelevantes y podés refutar?
+- ¿Cambia tu posición original? ¿En qué?
+
+Sé directo. Máximo 4 oraciones."""
+
+    r3_tasks = [
+        call_ai_model_no_stream('gemini',   prompt_r3_base, timeout=MODEL_TIMEOUT_VALIDATION, endpoint="/api/crucible"),
+        call_ai_model_no_stream('deepseek', prompt_r3_base, timeout=MODEL_TIMEOUT_VALIDATION, endpoint="/api/crucible"),
+        call_ai_model_no_stream('claude',   prompt_r3_base, timeout=MODEL_TIMEOUT_VALIDATION, endpoint="/api/crucible"),
+    ]
+    r3_results = await asyncio.gather(*r3_tasks)
+    respuestas_r3 = {
+        'gemini':   r3_results[0],
+        'deepseek': r3_results[1],
+        'claude':   r3_results[2],
+    }
+
+    # --- SOPHIA FINAL: sintetiza todo ---
+    prompt_sophia_final = f"""Sos Sophia, árbitro final de Crisalia.
+
+SÍNTESIS ORIGINAL:
+{request.sintesis}
+
+ATAQUE DEL ABOGADO DEL DIABLO:
+{ataque}
+
+RESPUESTAS DE LOS JUECES AL ATAQUE:
+Logos (Gemini): {respuestas_r3['gemini']}
+Nous (DeepSeek): {respuestas_r3['deepseek']}
+Ethos (Claude): {respuestas_r3['claude']}
+
+Producí el veredicto final en JSON válido:
+{{
+    "sintesis_final": "2-3 oraciones: qué sobrevivió del análisis original y qué cambió tras el ataque",
+    "consenso_final": 0-100,
+    "veredicto_final": "SOSTENIDO" | "MATIZADO" | "DERRIBADO"
+}}
+
+SOSTENIDO = el ataque no encontró fallas reales, la síntesis original resiste.
+MATIZADO = el ataque identificó puntos válidos que modifican parcialmente la síntesis.
+DERRIBADO = el ataque expuso fallas fundamentales que invalidan la síntesis original.
+
+Respondé SOLO con el JSON válido."""
+
+    raw_final = await call_ai_model_no_stream('gemini', prompt_sophia_final, timeout=MODEL_TIMEOUT_VALIDATION, endpoint="/api/crucible")
+
+    try:
+        json_start = raw_final.find('{')
+        json_end   = raw_final.rfind('}') + 1
+        final      = json.loads(raw_final[json_start:json_end])
+    except Exception:
+        final = {
+            "sintesis_final": raw_final[:500],
+            "consenso_final": 0,
+            "veredicto_final": "ERROR_PARSEO"
+        }
+
+    return CrucibleResponse(
+        ataque=ataque,
+        respuestas_r3=respuestas_r3,
+        sintesis_final=final.get("sintesis_final", ""),
+        consenso_final=final.get("consenso_final", 0),
+        veredicto_final=final.get("veredicto_final", "ERROR"),
+        timestamp=datetime.now(TZ_BA).isoformat()
+    )
+
+
+# --- ENDPOINT 3: REGISTRO DE PASOS DEL AGENTE ---
 
 @app.post("/api/agent-step", response_model=AgentStepResponse)
 async def register_agent_step(request: AgentStepRequest):
