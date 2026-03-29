@@ -169,12 +169,7 @@ async def get_text_from_files(files: List[UploadFile]) -> str:
 # --- LÓGICA DE PROMPTS ---
 def build_contextual_prompt(user_prompt, history, mode, isDocument=False):
     _now = datetime.now(_TZ_BA)
-    _date_ctx = (
-        f"**CONTEXTO TEMPORAL:** Hoy es {_now.strftime('%A %d de %B de %Y')}, "
-        f"hora {_now.strftime('%H:%M')} (Buenos Aires).
-
-"
-    )
+    _date_ctx = '**CONTEXTO TEMPORAL:** Hoy es ' + _now.strftime('%A %d de %B de %Y') + ', hora ' + _now.strftime('%H:%M') + ' (Buenos Aires).' + chr(10) + chr(10)
     history_context = ""
     if history:
         history_context += "**Historial de la Conversación Anterior (para dar contexto):**\n"
