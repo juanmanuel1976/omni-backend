@@ -162,6 +162,13 @@ async def get_text_from_files(files: List[UploadFile]) -> str:
 
 # --- LÓGICA DE PROMPTS ---
 def build_contextual_prompt(user_prompt, history, mode, isDocument=False):
+    _now = datetime.now(_TZ_BA)
+    _date_ctx = (
+        f"**CONTEXTO TEMPORAL:** Hoy es {_now.strftime('%A %d de %B de %Y')}, "
+        f"hora {_now.strftime('%H:%M')} (Buenos Aires).
+
+"
+    )
     history_context = ""
     if history:
         history_context += "**Historial de la Conversación Anterior (para dar contexto):**\n"
@@ -169,7 +176,7 @@ def build_contextual_prompt(user_prompt, history, mode, isDocument=False):
             history_context += f"- **Tu Consulta Anterior:** {turn.get('prompt', 'N/A')}\n"
             history_context += f"- **Nuestra Síntesis Anterior:** {turn.get('synthesis', 'N/A')}\n---\n"
     if isDocument:
-        base_prompt = f"""**Instrucciones Clave:**
+        base_prompt = f"""{_date_ctx}**Instrucciones Clave:**
 1.  **Fuente de Verdad Absoluta:** El usuario ha proporcionado un documento. Su contenido es la única fuente de verdad.
 2.  **Tarea:** Basa tu respuesta exclusivamente en la información contenida en el documento. No añadas conocimiento externo ni verifiques los datos del documento.
 3.  **Idioma:** Responde siempre y únicamente en español.
@@ -179,14 +186,14 @@ def build_contextual_prompt(user_prompt, history, mode, isDocument=False):
         return f"{history_context}\n{base_prompt}" if history_context else base_prompt
     
     if mode == 'perspectives':
-        base_prompt = f"""**Instrucciones Clave:**
+        base_prompt = f"""{_date_ctx}**Instrucciones Clave:**
 1.  **Idioma Obligatorio:** Responde siempre y únicamente en español.
 2.  **Análisis Estructurado:** Tu tarea principal es ser útil. Si la consulta pide datos concretos, primero establece la base factual de manera clara y precisa. Solo después, si es apropiado, desarrolla un análisis estratégico sobre esa base verificable.
 **Consulta Actual del Usuario:**
 "{user_prompt}"
 """
     else:
-        base_prompt = f"""**Instrucciones Clave:**
+        base_prompt = f"""{_date_ctx}**Instrucciones Clave:**
 1.  **Idioma Obligatorio:** Responde siempre y únicamente en español.
 2.  **Estilo Conciso:** Sé muy breve y directo.
 **Consulta Actual del Usuario:**
