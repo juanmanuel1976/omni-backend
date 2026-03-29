@@ -1,16 +1,20 @@
---extra-index-url https://download.pytorch.org/whl/cpu
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
+fastapi
+uvicorn[standard]
+gunicorn
 httpx
 anthropic
 pydantic
 WeasyPrint
 pypdf
 python-multipart
-sentence-transformers==2.2.2
-faiss-cpu==1.7.4
-numpy==1.24.3
-torch==2.2.0+cpu
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+sentence-transformers
+faiss-cpu
+numpy
 google-cloud-vision==3.7.0
 PyMuPDF==1.24.0
-pandas
+protobuf>=4.21.6,<5.0.0
+grpcio==1.62.0
+grpcio-status==1.62.0
+googleapis-common-protos==1.62.0
