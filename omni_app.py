@@ -43,6 +43,7 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
 # NUEVO: Identificador de entorno (Por defecto asume 'produccion' por seguridad)
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "produccion")
+_INTERFACE = {"produccion": "main", "main": "main", "desarrollo": "dev", "dev": "dev"}.get(ENVIRONMENT, ENVIRONMENT)
 
 # --- INICIALIZACIÓN DE LA APLICACIÓN FASTAPI ---
 app = FastAPI(title="OmniQuery API")
@@ -92,7 +93,7 @@ async def log_user_query_supabase(endpoint: str, prompt: str, extra_info: dict =
                                    respuesta: str = None, duracion_ms: int = None):
     """Guarda consultas con respuesta, timing e interface de origen."""
     safe_extra_info = extra_info or {}
-    safe_extra_info["entorno"] = ENVIRONMENT
+    safe_extra_info["entorno"] = _INTERFACE
     if respuesta:
         safe_extra_info["sintesis"] = respuesta
     if duracion_ms is not None:
@@ -127,7 +128,7 @@ async def log_user_query_supabase(endpoint: str, prompt: str, extra_info: dict =
             "respuesta":      respuesta,
             "ip":             safe_extra_info.pop("ip_usuario", None),
             "duracion_ms":    duracion_ms,
-            "interface":      safe_extra_info.get("entorno", ENVIRONMENT),
+            "interface":      _INTERFACE,
             "tiene_documento": safe_extra_info.pop("isDocument", False) or False,
             "extra_info":     safe_extra_info,
         }
