@@ -121,10 +121,15 @@ async def log_user_query_supabase(endpoint: str, prompt: str, extra_info: dict =
             "Prefer": "return=minimal"
         }
         payload = {
-            "fecha_hora": datetime.now(_TZ_BA).isoformat(),
-            "endpoint": endpoint,
-            "prompt": prompt,
-            "extra_info": safe_extra_info
+            "fecha_hora":     datetime.now(_TZ_BA).isoformat(),
+            "endpoint":       endpoint,
+            "prompt":         prompt,
+            "respuesta":      respuesta,
+            "ip":             safe_extra_info.pop("ip_usuario", None),
+            "duracion_ms":    duracion_ms,
+            "interface":      safe_extra_info.get("entorno", ENVIRONMENT),
+            "tiene_documento": safe_extra_info.pop("isDocument", False) or False,
+            "extra_info":     safe_extra_info,
         }
         async with httpx.AsyncClient(timeout=10.0) as client:
             await client.post(f"{SUPABASE_URL}/rest/v1/consultas_log", headers=headers, json=payload)
