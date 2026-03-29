@@ -7,7 +7,8 @@ pydantic
 WeasyPrint
 pypdf
 python-multipart
-torch @ https://download.pytorch.org/whl/cpu/torch-2.11.0%2Bcpu-cp311-cp311-linux_x86_64.whl
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.11.0+cpu
 sentence-transformers
 faiss-cpu
 numpy
