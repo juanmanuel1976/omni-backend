@@ -86,12 +86,15 @@ class FactCheckRequest(BaseModel):
     original_query: str
 
 # --- REGISTRADOR DE CONSULTAS EN SEGUNDO PLANO (CON IDENTIFICADOR) ---
-async def log_user_query_supabase(endpoint: str, prompt: str, extra_info: dict = None):
-    """Guarda silenciosamente las consultas. Incluye el entorno (Produccion/Dev)."""
-    
-    # Inyectamos el entorno en la información extra
+async def log_user_query_supabase(endpoint: str, prompt: str, extra_info: dict = None,
+                                   respuesta: str = None, duracion_ms: int = None):
+    """Guarda consultas con respuesta, timing e interface de origen."""
     safe_extra_info = extra_info or {}
     safe_extra_info["entorno"] = ENVIRONMENT
+    if respuesta:
+        safe_extra_info["sintesis"] = respuesta
+    if duracion_ms is not None:
+        safe_extra_info["duracion_ms"] = duracion_ms
 
     if not SUPABASE_URL or not SUPABASE_KEY:
         try:
@@ -398,7 +401,8 @@ async def rag_analysis_and_synthesize(raw_request: Request, background_tasks: Ba
         x_forwarded = raw_request.headers.get("X-Forwarded-For")
         client_ip = x_forwarded.split(",")[0].strip() if x_forwarded else (raw_request.client.host if raw_request.client else "127.0.0.1")
 
-        background_tasks.add_task(log_user_query_supabase, "/api/rag-analysis", prompt, {"archivos": [f.filename for f in files], "ip_usuario": client_ip})
+        import time as _time_mod
+        _t0_rag = _time_mod.time()
 
         history = json.loads(history_json) if history_json else []
         raw_text = await get_text_from_files(files)
@@ -495,7 +499,8 @@ async def refine_and_synthesize(raw_request: Request, request: RefineRequest, ba
     x_forwarded = raw_request.headers.get("X-Forwarded-For")
     client_ip = x_forwarded.split(",")[0].strip() if x_forwarded else (raw_request.client.host if raw_request.client else "127.0.0.1")
     
-    background_tasks.add_task(log_user_query_supabase, "/api/refine", request.prompt, {"synthesis_type": request.synthesis_type, "ip_usuario": client_ip})
+    import time as _time_mod
+    _t0_refine = _time_mod.time()
 
     contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'direct')
     active_responses = {k: v['content'] for k, v in request.initial_responses.items() if request.decisions.get(k) != 'discard'}
@@ -512,6 +517,9 @@ async def refine_and_synthesize(raw_request: Request, request: RefineRequest, ba
         synthesis_prompt_parts.append(f"**Respuesta de {model.title()}:**\n{content}\n")
     final_prompt = "\n".join(synthesis_prompt_parts)
     synthesis_text = await call_ai_model_no_stream('gemini', final_prompt)
+    _dur_refine = int((_time_mod.time() - _t0_refine) * 1000)
+    background_tasks.add_task(log_user_query_supabase, "/api/refine", request.prompt,
+        {"synthesis_type": request.synthesis_type, "ip_usuario": client_ip}, synthesis_text, _dur_refine)
     return {"synthesis": synthesis_text}
 
 @app.post('/api/debate')
@@ -519,7 +527,8 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     x_forwarded = raw_request.headers.get("X-Forwarded-For")
     client_ip = x_forwarded.split(",")[0].strip() if x_forwarded else (raw_request.client.host if raw_request.client else "127.0.0.1")
     
-    background_tasks.add_task(log_user_query_supabase, "/api/debate", request.prompt, {"isDocument": request.isDocument, "ip_usuario": client_ip})
+    import time as _time_mod
+    _t0 = _time_mod.time()
 
     contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'direct', request.isDocument)
     
@@ -555,6 +564,9 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
         synthesis_prompt += "\n\n**INSTRUCCIÓN ESPECIAL DE SÍNTESIS FORZADA:** El usuario ha solicitado finalizar el debate. Enfócate en los consensos existentes y presenta las diferencias restantes como perspectivas complementarias o áreas para futura exploración, no como conflictos a resolver. El objetivo es entregar un resultado accionable con la información disponible."
 
     final_synthesis = await call_ai_model_no_stream('gemini', synthesis_prompt)
+    _dur = int((_time_mod.time() - _t0) * 1000)
+    background_tasks.add_task(log_user_query_supabase, "/api/debate", request.prompt,
+        {"isDocument": request.isDocument, "ip_usuario": client_ip}, final_synthesis, _dur)
     return { "revised": revised_responses, "synthesis": final_synthesis, "initial": initial_responses, "dissidenceContext": request.dissidenceContext }
 
 @app.post('/api/semantic-consensus')
