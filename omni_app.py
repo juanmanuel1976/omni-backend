@@ -17,6 +17,8 @@ from typing import Dict, Optional, List, Any
 from anthropic import AsyncAnthropic
 from rag_manager import rag_manager
 from datetime import datetime
+from zoneinfo import ZoneInfo
+_TZ_BA = ZoneInfo("America/Argentina/Buenos_Aires")
 from ocr_processor import ocr_processor
 import sqlite3
 from contextlib import contextmanager
@@ -100,7 +102,7 @@ async def log_user_query_supabase(endpoint: str, prompt: str, extra_info: dict =
         try:
             os.makedirs("logs", exist_ok=True)
             log_entry = {
-                "fecha_hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "fecha_hora": datetime.now(_TZ_BA).strftime("%Y-%m-%d %H:%M:%S"),
                 "endpoint": endpoint,
                 "prompt": prompt,
                 "extra": safe_extra_info
@@ -119,7 +121,7 @@ async def log_user_query_supabase(endpoint: str, prompt: str, extra_info: dict =
             "Prefer": "return=minimal"
         }
         payload = {
-            "fecha_hora": datetime.now().isoformat(),
+            "fecha_hora": datetime.now(_TZ_BA).isoformat(),
             "endpoint": endpoint,
             "prompt": prompt,
             "extra_info": safe_extra_info
