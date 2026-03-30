@@ -484,7 +484,9 @@
             jsPDF = window.jspdf.jsPDF;
         }
         window.API_BASE_URL = 'https://omni-backend-dev.onrender.com';
-        window.PLAN = localStorage.getItem('crisalia_plan') || 'pro'; // dev: all features unlocked by default
+        // dev.crisalia.io + localhost: all features unlocked; other hostnames default to 'free'
+        window.PLAN = localStorage.getItem('crisalia_plan') ||
+            (['dev.crisalia.io', 'localhost', '127.0.0.1'].includes(window.location.hostname) ? 'pro' : 'free');
         window.CREATIVE_MODE = false;
         // Badge "Modo Mejora activo" en el resultado cuando aplica
         function showImproveBadge() {
