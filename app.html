@@ -481,7 +481,7 @@
             state = {
                 prompt: "", initial_responses: { gemini: { content: "" }, deepseek: { content: "" }, claude: { content: "" } },
                 decisions: { gemini: 'normal', deepseek: 'normal', claude: 'normal' }, synthesis: "",
-                isLoading: false, isStreaming: false, history: [], isRefining: false, documentText: "" 
+                isLoading: false, isStreaming: false, history: [], isRefining: false, documentText: "", consensusData: null 
             };
             dom = {
                 step1: document.getElementById('step1'), step2: document.getElementById('step2'), step3: document.getElementById('step3'),
@@ -1020,6 +1020,7 @@ if (hasPDF) {
                 console.log('✅ Análisis semántico recibido:', analysis);
                 
                 const score = analysis.consensus_score || 50;
+                state.consensusData = analysis;
                 
                 // Buscar los elementos del DOM
                 const consensusContainer = document.getElementById('consensus-container');
@@ -1206,6 +1207,32 @@ if (selectedMode === 'debate') {
                 tempDiv.innerHTML = state.synthesis; 
                 content += tempDiv.innerText; 
             } 
+            if (state.consensusData) {
+                const cd = state.consensusData;
+                const sc = cd.strong_consensus ? cd.strong_consensus.length : 0;
+                const mc = cd.moderate_consensus ? cd.moderate_consensus.length : 0;
+                content += '
+NIVEL DE CONSENSO ENTRE MODELOS
+================================
+';
+                content += (cd.consensus_score || 0) + '%
+';
+                content += 'Analisis semantico: ' + sc + ' consensos fuertes, ' + mc + ' moderados
+';
+                if (cd.explanation) content += cd.explanation + '
+';
+                if (cd.strong_consensus && cd.strong_consensus.length > 0)
+                    content += 'Consenso fuerte: ' + cd.strong_consensus.join(', ') + '
+';
+                if (cd.moderate_consensus && cd.moderate_consensus.length > 0)
+                    content += 'Consenso moderado: ' + cd.moderate_consensus.join(', ') + '
+';
+                if (cd.divergence_areas && cd.divergence_areas.length > 0)
+                    content += 'Divergencias: ' + cd.divergence_areas.join(', ') + '
+';
+                content += '
+';
+            }
             return content; 
         }
         
