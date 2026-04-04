@@ -38,6 +38,7 @@ MODEL_TIMEOUT_VALIDATION = 55.0
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+TAVILY_API_KEY    = os.environ.get("TAVILY_API_KEY")
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
@@ -167,9 +168,16 @@ async def get_text_from_files(files: List[UploadFile]) -> str:
     return text
 
 # --- LÓGICA DE PROMPTS ---
-def build_contextual_prompt(user_prompt, history, mode, isDocument=False):
+def build_contextual_prompt(user_prompt, history, mode, isDocument=False, web_context=None):
     _now = datetime.now(_TZ_BA)
-    _date_ctx = '**CONTEXTO TEMPORAL:** Hoy es ' + _now.strftime('%A %d de %B de %Y') + ', hora ' + _now.strftime('%H:%M') + ' (Buenos Aires).' + chr(10) + chr(10)
+    _date_ctx = (
+        f"**CONTEXTO TEMPORAL:** Hoy es {_now.strftime('%A %d de %B de %Y')}, hora {_now.strftime('%H:%M')} (Buenos Aires). "
+        f"Tu conocimiento tiene una fecha de corte en el pasado. Aunque hoy sea {_now.strftime('%d de %B de %Y')}, "
+        "los eventos ocurridos después de tu entrenamiento son desconocidos para vos — incluso si ya sucedieron. "
+        "Si la consulta involucra un evento, anuncio o producto reciente que no aparece en los resultados de búsqueda, "
+        "decí explícitamente que no tenés información verificada al respecto. "
+        "No presentes suposiciones como hechos ni inventes detalles para completar lo que no sabés.\n\n"
+    )
     history_context = ""
     if history:
         history_context += "**Historial de la Conversación Anterior (para dar contexto):**\n"
@@ -177,29 +185,35 @@ def build_contextual_prompt(user_prompt, history, mode, isDocument=False):
             history_context += f"- **Tu Consulta Anterior:** {turn.get('prompt', 'N/A')}\n"
             history_context += f"- **Nuestra Síntesis Anterior:** {turn.get('synthesis', 'N/A')}\n---\n"
     if isDocument:
-        base_prompt = f"""{_date_ctx}**Instrucciones Clave:**
-1.  **Fuente de Verdad Absoluta:** El usuario ha proporcionado un documento. Su contenido es la única fuente de verdad.
-2.  **Tarea:** Basa tu respuesta exclusivamente en la información contenida en el documento. No añadas conocimiento externo ni verifiques los datos del documento.
-3.  **Idioma:** Responde siempre y únicamente en español.
-**Consulta del Usuario sobre el Documento:**
-"{user_prompt}"
-"""
+        _web_block = (f"**INFORMACIÓN DE BÚSQUEDA WEB (fuente: Tavily):**\n{web_context}\n\n" if web_context else "")
+        base_prompt = (
+            f"{_date_ctx}**Instrucciones Clave:**\n"
+            "1.  **Fuente de Verdad Absoluta:** El usuario ha proporcionado un documento. Su contenido es la única fuente de verdad.\n"
+            "2.  **Tarea:** Basa tu respuesta exclusivamente en la información contenida en el documento. No añadas conocimiento externo ni verifiques los datos del documento.\n"
+            "3.  **Idioma:** Responde siempre y únicamente en español.\n"
+            + _web_block
+            + f"**Consulta del Usuario sobre el Documento:**\n\"{user_prompt}\"\n"
+        )
         return f"{history_context}\n{base_prompt}" if history_context else base_prompt
     
     if mode == 'perspectives':
-        base_prompt = f"""{_date_ctx}**Instrucciones Clave:**
-1.  **Idioma Obligatorio:** Responde siempre y únicamente en español.
-2.  **Análisis Estructurado:** Tu tarea principal es ser útil. Si la consulta pide datos concretos, primero establece la base factual de manera clara y precisa. Solo después, si es apropiado, desarrolla un análisis estratégico sobre esa base verificable.
-**Consulta Actual del Usuario:**
-"{user_prompt}"
-"""
+        _web_block = (f"**INFORMACIÓN DE BÚSQUEDA WEB (fuente: Tavily):**\n{web_context}\n\n" if web_context else "")
+        base_prompt = (
+            f"{_date_ctx}**Instrucciones Clave:**\n"
+            "1.  **Idioma Obligatorio:** Responde siempre y únicamente en español.\n"
+            "2.  **Análisis Estructurado:** Tu tarea principal es ser útil. Si la consulta pide datos concretos, primero establece la base factual de manera clara y precisa. Solo después, si es apropiado, desarrolla un análisis estratégico sobre esa base verificable.\n"
+            + _web_block
+            + f"**Consulta Actual del Usuario:**\n\"{user_prompt}\"\n"
+        )
     else:
-        base_prompt = f"""{_date_ctx}**Instrucciones Clave:**
-1.  **Idioma Obligatorio:** Responde siempre y únicamente en español.
-2.  **Estilo Conciso:** Sé muy breve y directo.
-**Consulta Actual del Usuario:**
-"{user_prompt}"
-"""
+        _web_block = (f"**INFORMACIÓN DE BÚSQUEDA WEB (fuente: Tavily):**\n{web_context}\n\n" if web_context else "")
+        base_prompt = (
+            f"{_date_ctx}**Instrucciones Clave:**\n"
+            "1.  **Idioma Obligatorio:** Responde siempre y únicamente en español.\n"
+            "2.  **Estilo Conciso:** Sé muy breve y directo.\n"
+            + _web_block
+            + f"**Consulta Actual del Usuario:**\n\"{user_prompt}\"\n"
+        )
     return f"{history_context}\n{base_prompt}" if history_context else base_prompt
 
 def build_enhanced_dialectic_prompt(base_prompt, dissidence_context=None):
@@ -224,6 +238,90 @@ def build_enhanced_dialectic_prompt(base_prompt, dissidence_context=None):
             
         enhanced_prompt += refinement_section
     return enhanced_prompt
+
+
+# --- WEB SEARCH (TAVILY) + CLASIFICADOR SEMÁNTICO ---
+async def web_search(query: str) -> str:
+    """Ejecuta una búsqueda Tavily y devuelve un bloque de texto con los resultados."""
+    if not TAVILY_API_KEY:
+        return ""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.post(
+                "https://api.tavily.com/search",
+                json={
+                    "api_key": TAVILY_API_KEY,
+                    "query": query,
+                    "search_depth": "basic",
+                    "max_results": 5,
+                    "include_answer": True,
+                },
+            )
+            if r.status_code != 200:
+                logger.error(f"[tavily] HTTP {r.status_code}: {r.text[:200]}")
+                return ""
+            data = r.json()
+            parts = []
+            if data.get("answer"):
+                parts.append(f"Respuesta directa: {data['answer']}")
+            for result in data.get("results", [])[:5]:
+                title   = result.get("title", "")
+                url     = result.get("url", "")
+                content = result.get("content", "")[:400]
+                parts.append(f"- {title} ({url})\n  {content}")
+            return "\n".join(parts) if parts else ""
+    except Exception as e:
+        logger.error(f"[tavily] Error: {e}")
+        return ""
+
+
+async def _classify_needs_web_search(prompt: str) -> bool:
+    """Clasificador binario: retorna True si el prompt necesita datos en tiempo real.
+    Usa Gemini Flash con maxOutputTokens=5 — rápido y barato (~$0.000002/llamada)."""
+    if not GOOGLE_API_KEY or not TAVILY_API_KEY:
+        return False
+    classifier_prompt = (
+        "Eres un clasificador binario estricto. Decide si la siguiente consulta NECESITA "
+        "información en tiempo real de internet (noticias recientes, precios actuales, eventos "
+        "en curso, datos de hoy, lanzamientos nuevos, resultados deportivos, clima actual) "
+        "para ser respondida correctamente.\n\n"
+        f"Consulta: {prompt[:400]}\n\n"
+        "Responde ÚNICAMENTE con una sola palabra: 'yes' o 'no'. Sin explicación, sin puntuación."
+    )
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            gurl = (
+                f"https://generativelanguage.googleapis.com/v1beta/models/"
+                f"gemini-2.0-flash:generateContent?key={GOOGLE_API_KEY}"
+            )
+            payload = {
+                "contents": [{"parts": [{"text": classifier_prompt}]}],
+                "generationConfig": {"maxOutputTokens": 5, "temperature": 0.0},
+            }
+            r = await client.post(gurl, json=payload)
+            if r.status_code != 200:
+                return False
+            answer = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip().lower()
+            return answer.startswith("yes")
+    except Exception as e:
+        logger.error(f"[classifier] Error: {e}")
+        return False
+
+
+async def resolve_web_context(prompt: str) -> tuple:
+    """Retorna (web_context_str, fue_disparado).
+    Maneja el prefijo explícito 'w.' y el clasificador semántico automático."""
+    explicit = prompt.lower().startswith("w.")
+    clean = prompt[2:].strip() if explicit else prompt
+    if explicit:
+        ctx = await web_search(clean)
+        return ctx, True
+    if TAVILY_API_KEY:
+        needs = await _classify_needs_web_search(clean)
+        if needs:
+            ctx = await web_search(clean)
+            return ctx, True
+    return "", False
 
 # --- FUNCIONES DE LLAMADA A LAS APIs ---
 async def stream_gemini(prompt):
@@ -470,7 +568,9 @@ async def generate_initial_stream(raw_request: Request, request: GenerateRequest
     
     background_tasks.add_task(log_user_query_supabase, "/api/generate", request.prompt, {"mode": request.mode, "ip_usuario": client_ip})
 
-    contextual_prompt = build_contextual_prompt(request.prompt, request.history, request.mode)
+    _web_ctx, _ = await resolve_web_context(request.prompt)
+    _p = request.prompt[2:].strip() if request.prompt.lower().startswith('w.') else request.prompt
+    contextual_prompt = build_contextual_prompt(_p, request.history, request.mode, web_context=_web_ctx)
     async def event_stream():
         tasks = { "gemini": stream_gemini(contextual_prompt), "deepseek": stream_deepseek(contextual_prompt), "claude": stream_claude(contextual_prompt) }
         async def stream_wrapper(name, agen):
@@ -500,7 +600,9 @@ async def generate_initial_response(raw_request: Request, request: GenerateIniti
     
     background_tasks.add_task(log_user_query_supabase, "/api/generate-initial", request.prompt, {"model": request.model, "ip_usuario": client_ip})
 
-    contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'direct')
+    _web_ctx7, _ = await resolve_web_context(request.prompt)
+    _p7 = request.prompt[2:].strip() if request.prompt.lower().startswith('w.') else request.prompt
+    contextual_prompt = build_contextual_prompt(_p7, request.history, 'direct', web_context=_web_ctx7)
     response = await call_ai_model_no_stream(request.model, contextual_prompt)
     return {"response": response}
 
@@ -512,7 +614,9 @@ async def refine_and_synthesize(raw_request: Request, request: RefineRequest, ba
     import time as _time_mod
     _t0_refine = _time_mod.time()
 
-    contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'direct')
+    _web_ctx8, _ = await resolve_web_context(request.prompt)
+    _p8 = request.prompt[2:].strip() if request.prompt.lower().startswith('w.') else request.prompt
+    contextual_prompt = build_contextual_prompt(_p8, request.history, 'direct', web_context=_web_ctx8)
     active_responses = {k: v['content'] for k, v in request.initial_responses.items() if request.decisions.get(k) != 'discard'}
     highlighted_response = next((v['content'] for k, v in request.initial_responses.items() if request.decisions.get(k) == 'highlight'), None)
     synthesis_prompt_parts = [f"**Consulta Original (con su historial):**\n\"{contextual_prompt}\""]
@@ -540,7 +644,11 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     import time as _time_mod
     _t0 = _time_mod.time()
 
-    contextual_prompt = build_contextual_prompt(request.prompt, request.history, 'direct', request.isDocument)
+    _web_ctx9 = ""
+    if not request.isDocument:
+        _web_ctx9, _ = await resolve_web_context(request.prompt)
+    _p9 = request.prompt[2:].strip() if request.prompt.lower().startswith('w.') else request.prompt
+    contextual_prompt = build_contextual_prompt(_p9, request.history, 'direct', request.isDocument, web_context=_web_ctx9)
     
     if request.dissidenceContext:
         contextual_prompt = build_enhanced_dialectic_prompt(contextual_prompt, request.dissidenceContext)
