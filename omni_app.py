@@ -644,9 +644,7 @@ async def debate_and_synthesize(raw_request: Request, request: DebateRequest, ba
     import time as _time_mod
     _t0 = _time_mod.time()
 
-    _web_ctx9 = ""
-    if not request.isDocument:
-        _web_ctx9, _ = await resolve_web_context(request.prompt)
+    _web_ctx9, _ = await resolve_web_context(request.prompt)
     _p9 = request.prompt[2:].strip() if request.prompt.lower().startswith('w.') else request.prompt
     contextual_prompt = build_contextual_prompt(_p9, request.history, 'direct', request.isDocument, web_context=_web_ctx9)
     
