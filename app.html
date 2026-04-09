@@ -176,7 +176,26 @@
                 </div>
             </div>
             <textarea id="prompt-input" placeholder="Pega el texto directamente aquí..." class="w-full h-40 p-4 bg-gray-900 border border-gray-700 text-gray-300 rounded-lg resize-y focus:ring-2 focus:ring-violet-500 focus:border-transparent"></textarea>
-            
+
+            <!-- Búsqueda web — toggle manual + indicador semántico -->
+            <div class="mt-2 flex items-center justify-between gap-3 px-1">
+                <label id="web-search-label" class="flex items-center gap-2 cursor-pointer select-none group" title="Activa búsqueda web en tiempo real vía Tavily. También podés escribir 'w. tu pregunta'.">
+                    <div class="relative flex-shrink-0">
+                        <input type="checkbox" id="web-search-toggle" class="sr-only peer">
+                        <div class="w-9 h-5 bg-gray-700 rounded-full peer peer-checked:bg-cyan-600 transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                    </div>
+                    <span class="text-xs text-gray-500 group-hover:text-gray-300 transition-colors flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"/></svg>
+                        Búsqueda web
+                    </span>
+                </label>
+                <span id="web-auto-indicator" class="hidden text-xs text-cyan-400/80 items-center gap-1">
+                    <svg class="w-3 h-3 animate-pulse" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>
+                    Búsqueda activa
+                </span>
+                <span class="text-xs text-gray-700 hover:text-gray-500 cursor-help transition-colors" title="Manual: activá el toggle. Automático: Crisalia detecta si tu pregunta necesita datos en tiempo real. También podés escribir 'w. tu pregunta'.">¿Cómo funciona? ⓘ</span>
+            </div>
+
             <div class="mt-6">
                 <label class="text-sm font-medium text-gray-400 mb-3 block">Metodología de Análisis:</label>
                 <div class="mode-selector flex flex-col sm:flex-row bg-gray-900 rounded-lg p-1 border border-gray-700">
@@ -689,7 +708,23 @@ async function handleFileSelect(event) {
             }
         }
         
+        // Inyectar prefijo w. si el toggle de búsqueda web está activo
+        const webToggle = document.getElementById('web-search-toggle');
+        if (webToggle && webToggle.checked && !promptText.toLowerCase().startsWith('w.')) {
+            promptText = 'w. ' + promptText;
+        }
         state.prompt = promptText;
+        // Mostrar indicador de búsqueda activa si se va a usar
+        const webIndicator = document.getElementById('web-auto-indicator');
+        if (webIndicator) {
+            if (promptText.toLowerCase().startsWith('w.')) {
+                webIndicator.classList.remove('hidden');
+                webIndicator.classList.add('flex');
+            } else {
+                webIndicator.classList.add('hidden');
+                webIndicator.classList.remove('flex');
+            }
+        }
         const selectedMode = document.querySelector('input[name="analysisMode"]:checked').value;
         
         setLoading(true, "Iniciando análisis...");
@@ -1349,6 +1384,21 @@ NO DETECTAR:
             if (modeRadios.length) {
                 modeRadios.forEach(radio => radio.addEventListener('change', updateModeDescription));
                 updateModeDescription();
+            }
+
+            // Toggle de búsqueda web — mostrar/ocultar indicador en tiempo real
+            const webToggleEl = document.getElementById('web-search-toggle');
+            const webIndicatorEl = document.getElementById('web-auto-indicator');
+            if (webToggleEl && webIndicatorEl) {
+                webToggleEl.addEventListener('change', () => {
+                    if (webToggleEl.checked) {
+                        webIndicatorEl.classList.remove('hidden');
+                        webIndicatorEl.classList.add('flex');
+                    } else {
+                        webIndicatorEl.classList.add('hidden');
+                        webIndicatorEl.classList.remove('flex');
+                    }
+                });
             }
 
             // Tema oscuro/claro (solo estético para la demostración)
