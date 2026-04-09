@@ -169,25 +169,23 @@ async def get_text_from_files(files: List[UploadFile]) -> str:
 
 # --- LÓGICA DE PROMPTS ---
 _CRISALIA_CONTEXT = """**CONTEXTO DEL SISTEMA — CRISALIA:**
-Crisalia es una API REST de verificación y auditoría de respuestas LLM. Su propuesta de valor central:
-toma cualquier pregunta, la debate entre 3 modelos en paralelo (Gemini, DeepSeek, Claude), los hace
-criticarse entre sí, y sintetiza una respuesta superior y más confiable. Posicionamiento: AUDITOR/ESCUDO
-de respuestas LLM — no reemplaza a los LLMs, los valida y mejora. Resultados benchmark: 95% win rate
-(v5b, n=15, juez GPT-4o ciego), razonamiento 8.33/10 vs Gemini solo 6.33/10.
+Crisalia es una API REST de verificación y mejora de respuestas de inteligencia artificial.
+Posicionamiento: AUDITOR y ESCUDO de respuestas LLM — no reemplaza a los modelos de IA, los valida,
+contrasta y mejora mediante un proceso propietario de análisis multi-perspectiva.
+Resultados benchmark: 95% win rate (n=15, juez ciego independiente), razonamiento 8.33/10 frente a
+6.33/10 del mejor modelo individual.
 
-Dueño: Victor Lima (alias Zulo). Web: www.crisalia.io. API: crisalia-public-api.onrender.com.
-Infraestructura: Render (FastAPI), Supabase, Hostinger. Equipo: sistema multi-agente de 12 agentes LLM
-+ 4 agentes de acción, coordinados por @crisaliaBot en Telegram.
+Web: www.crisalia.io. API pública: crisalia-public-api.onrender.com.
+Endpoints principales: /api/dialectic (análisis avanzado), /api/diversity (expansión creativa),
+/api/fact-check (verificación factual), /api/rag-analysis (documentos PDF).
+Prefijo "w." en el prompt activa búsqueda web en tiempo real.
 
-Modelos en el debate: Gemini 2.0 Flash (síntesis final), DeepSeek-chat (crítica), Claude 3 Haiku (consenso).
-Endpoints principales: /api/dialectic (debate multi-LLM), /api/diversity (expansión creativa),
-/api/fact-check (verificación factual), /api/rag-analysis (PDFs con FAISS).
-Prefijo "w." en el prompt activa búsqueda web real vía Tavily.
-
-Modelo de negocio: API SaaS B2B. Clientes objetivo: empresas y CTOs que usan LLMs en producción y
-necesitan validar sus respuestas antes de entregarlas a usuarios finales. Precio: tiers por volumen de
-requests. Ventaja competitiva: único sistema que usa debate adversarial multi-modelo para reducir
-alucinaciones, con benchmark empírico publicado.\n\n"""
+Modelo de negocio: API SaaS. Clientes potenciales: cualquier persona, equipo u organización que
+genere o consuma respuestas de IA y necesite mayor confiabilidad — desde desarrolladores individuales
+hasta equipos de producto, investigadores, profesionales de áreas reguladas, empresas con flujos
+automatizados de IA, y cualquier caso donde un error de un LLM tenga consecuencias reales.
+Precio: tiers por volumen de requests. Ventaja competitiva: el único sistema con benchmark empírico
+publicado que demuestra reducción de alucinaciones y mejora de razonamiento respecto a modelos solos.\n\n"""
 
 
 def build_contextual_prompt(user_prompt, history, mode, isDocument=False, web_context=None):
