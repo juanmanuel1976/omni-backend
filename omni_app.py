@@ -168,6 +168,28 @@ async def get_text_from_files(files: List[UploadFile]) -> str:
     return text
 
 # --- LÓGICA DE PROMPTS ---
+_CRISALIA_CONTEXT = """**CONTEXTO DEL SISTEMA — CRISALIA:**
+Crisalia es una API REST de verificación y auditoría de respuestas LLM. Su propuesta de valor central:
+toma cualquier pregunta, la debate entre 3 modelos en paralelo (Gemini, DeepSeek, Claude), los hace
+criticarse entre sí, y sintetiza una respuesta superior y más confiable. Posicionamiento: AUDITOR/ESCUDO
+de respuestas LLM — no reemplaza a los LLMs, los valida y mejora. Resultados benchmark: 95% win rate
+(v5b, n=15, juez GPT-4o ciego), razonamiento 8.33/10 vs Gemini solo 6.33/10.
+
+Dueño: Victor Lima (alias Zulo). Web: www.crisalia.io. API: crisalia-public-api.onrender.com.
+Infraestructura: Render (FastAPI), Supabase, Hostinger. Equipo: sistema multi-agente de 12 agentes LLM
++ 4 agentes de acción, coordinados por @crisaliaBot en Telegram.
+
+Modelos en el debate: Gemini 2.0 Flash (síntesis final), DeepSeek-chat (crítica), Claude 3 Haiku (consenso).
+Endpoints principales: /api/dialectic (debate multi-LLM), /api/diversity (expansión creativa),
+/api/fact-check (verificación factual), /api/rag-analysis (PDFs con FAISS).
+Prefijo "w." en el prompt activa búsqueda web real vía Tavily.
+
+Modelo de negocio: API SaaS B2B. Clientes objetivo: empresas y CTOs que usan LLMs en producción y
+necesitan validar sus respuestas antes de entregarlas a usuarios finales. Precio: tiers por volumen de
+requests. Ventaja competitiva: único sistema que usa debate adversarial multi-modelo para reducir
+alucinaciones, con benchmark empírico publicado.\n\n"""
+
+
 def build_contextual_prompt(user_prompt, history, mode, isDocument=False, web_context=None):
     _now = datetime.now(_TZ_BA)
     _date_ctx = (
@@ -187,7 +209,8 @@ def build_contextual_prompt(user_prompt, history, mode, isDocument=False, web_co
     if isDocument:
         _web_block = (f"**INFORMACIÓN DE BÚSQUEDA WEB (fuente: Tavily):**\n{web_context}\n\n" if web_context else "")
         base_prompt = (
-            f"{_date_ctx}**Instrucciones Clave:**\n"
+            _CRISALIA_CONTEXT
+            + f"{_date_ctx}**Instrucciones Clave:**\n"
             "1.  **Fuente de Verdad Absoluta:** El usuario ha proporcionado un documento. Su contenido es la única fuente de verdad.\n"
             "2.  **Tarea:** Basa tu respuesta exclusivamente en la información contenida en el documento. No añadas conocimiento externo ni verifiques los datos del documento.\n"
             "3.  **Idioma:** Responde siempre y únicamente en español.\n"
@@ -195,11 +218,12 @@ def build_contextual_prompt(user_prompt, history, mode, isDocument=False, web_co
             + f"**Consulta del Usuario sobre el Documento:**\n\"{user_prompt}\"\n"
         )
         return f"{history_context}\n{base_prompt}" if history_context else base_prompt
-    
+
     if mode == 'perspectives':
         _web_block = (f"**INFORMACIÓN DE BÚSQUEDA WEB (fuente: Tavily):**\n{web_context}\n\n" if web_context else "")
         base_prompt = (
-            f"{_date_ctx}**Instrucciones Clave:**\n"
+            _CRISALIA_CONTEXT
+            + f"{_date_ctx}**Instrucciones Clave:**\n"
             "1.  **Idioma Obligatorio:** Responde siempre y únicamente en español.\n"
             "2.  **Análisis Estructurado:** Tu tarea principal es ser útil. Si la consulta pide datos concretos, primero establece la base factual de manera clara y precisa. Solo después, si es apropiado, desarrolla un análisis estratégico sobre esa base verificable.\n"
             + _web_block
@@ -208,7 +232,8 @@ def build_contextual_prompt(user_prompt, history, mode, isDocument=False, web_co
     else:
         _web_block = (f"**INFORMACIÓN DE BÚSQUEDA WEB (fuente: Tavily):**\n{web_context}\n\n" if web_context else "")
         base_prompt = (
-            f"{_date_ctx}**Instrucciones Clave:**\n"
+            _CRISALIA_CONTEXT
+            + f"{_date_ctx}**Instrucciones Clave:**\n"
             "1.  **Idioma Obligatorio:** Responde siempre y únicamente en español.\n"
             "2.  **Estilo Conciso:** Sé muy breve y directo.\n"
             + _web_block
