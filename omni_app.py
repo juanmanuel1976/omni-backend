@@ -320,7 +320,7 @@ async def _classify_needs_web_search(prompt: str) -> bool:
         async with httpx.AsyncClient(timeout=8.0) as client:
             gurl = (
                 f"https://generativelanguage.googleapis.com/v1beta/models/"
-                f"gemini-2.0-flash:generateContent?key={GOOGLE_API_KEY}"
+                f"gemini-2.5-flash:generateContent?key={GOOGLE_API_KEY}"
             )
             payload = {
                 "contents": [{"parts": [{"text": classifier_prompt}]}],
@@ -358,7 +358,7 @@ async def stream_gemini(prompt):
         return
     try:
         async with httpx.AsyncClient(timeout=360.0) as client:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key={GOOGLE_API_KEY}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?key={GOOGLE_API_KEY}"
             payload = {"contents": [{"parts": [{"text": prompt}]}]}
             async with client.stream("POST", url, json=payload) as response:
                 if response.status_code != 200:
@@ -408,7 +408,7 @@ async def stream_claude(prompt):
         return
     try:
         client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY, timeout=360.0)
-        async with client.messages.stream(model="claude-3-haiku-20240307", max_tokens=4069, messages=[{"role": "user", "content": prompt}]) as stream:
+        async with client.messages.stream(model="claude-haiku-4-5-20251001", max_tokens=4069, messages=[{"role": "user", "content": prompt}]) as stream:
             async for text in stream.text_stream:
                 yield {"model": "claude", "chunk": text}
     except Exception as e:
@@ -419,7 +419,7 @@ async def call_ai_model_no_stream(model_name: str, prompt: str, timeout: float =
         async with httpx.AsyncClient(timeout=timeout) as client:
             if model_name == "gemini":
                 if not GOOGLE_API_KEY: return "Error: GOOGLE_API_KEY no configurada."
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GOOGLE_API_KEY}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GOOGLE_API_KEY}"
                 payload = {"contents": [{"parts": [{"text": prompt}]}]}
                 r = await client.post(url, json=payload)
                 if r.status_code != 200: return f"Error HTTP {r.status_code}: {r.text}"
@@ -434,7 +434,7 @@ async def call_ai_model_no_stream(model_name: str, prompt: str, timeout: float =
             elif model_name == "claude":
                 if not ANTHROPIC_API_KEY: return "Error: ANTHROPIC_API_KEY no configurada."
                 client_anthropic = AsyncAnthropic(api_key=ANTHROPIC_API_KEY, timeout=360.0)
-                msg = await client_anthropic.messages.create(model="claude-3-haiku-20240307", max_tokens=4069, messages=[{"role": "user", "content": prompt}])
+                msg = await client_anthropic.messages.create(model="claude-haiku-4-5-20251001", max_tokens=4069, messages=[{"role": "user", "content": prompt}])
                 return msg.content[0].text
     except Exception as e:
         return f"Error en {model_name}: {e}"
